@@ -500,4 +500,4 @@ GPL-3.0-or-later
 
 ## 👤 Author
 
-Diego Felipe Mateus, Senior Cloud Consultant, Red Hat
+Diego Felipe Mateus
