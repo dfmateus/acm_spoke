@@ -19,49 +19,50 @@ ansible-galaxy collection install dfmateus.acm_spoke
 
 ## ⚡ Quick start
 
-1. **Install the collection:**
+**Step 1 — Install the collection:**
 
-   ```bash
-   ansible-galaxy collection install dfmateus.acm_spoke
-   ```
+```bash
+ansible-galaxy collection install dfmateus.acm_spoke
+```
 
-2. **Configure RBAC on the Hub** (**`cluster-admin`**, once per Hub):
+**Step 2 — Configure RBAC on the Hub** (**`cluster-admin`**, once per Hub):
 
-   Create the `.local/hub_vars_full.yml` file with the connection variables (see [Prepare variables file](docs/usage.md#-prepare-the-variables-file) for details):
+Create the `.local/hub_vars_full.yml` file with the connection variables (see [Prepare variables file](docs/usage.md#-prepare-the-variables-file) for details):
 
-   ```bash
-   ansible-playbook dfmateus.acm_spoke.setup_hub_rbac \
-     -e @.local/hub_vars_full.yml
-   ```
+```bash
+ansible-playbook dfmateus.acm_spoke.setup_hub_rbac \
+  -e @.local/hub_vars_full.yml
+```
 
-   Creates the **`acm-spoke-provisioner`** and **`acm-spoke-reader`** ServiceAccounts with **`least-privilege`** RBAC on the Hub.
-3. **Onboard a spoke cluster** (SA **`acm-spoke-provisioner`**, once per cluster):
+Creates the **`acm-spoke-provisioner`** and **`acm-spoke-reader`** ServiceAccounts with **`least-privilege`** RBAC on the Hub.
 
-   ```bash
-   ansible-playbook dfmateus.acm_spoke.setup_spoke_cluster \
-     -e @.local/hub_vars_admin.yml \
-     -e target_cluster=my-spoke-cluster
-   ```
+**Step 3 — Onboard a spoke cluster** (SA **`acm-spoke-provisioner`**, once per cluster):
 
-4. **Resolve spoke access** (SA **`acm-spoke-reader`**, on every run):
+```bash
+ansible-playbook dfmateus.acm_spoke.setup_spoke_cluster \
+  -e @.local/hub_vars_admin.yml \
+  -e target_cluster=my-spoke-cluster
+```
 
-   ```bash
-   ansible-playbook dfmateus.acm_spoke.resolve_spoke_access \
-     -e @.local/hub_vars_readonly.yml \
-     -e target_cluster=my-spoke-cluster
-   ```
+**Step 4 — Resolve spoke access** (SA **`acm-spoke-reader`**, on every run):
 
-5. **Use the output facts** in your automation:
+```bash
+ansible-playbook dfmateus.acm_spoke.resolve_spoke_access \
+  -e @.local/hub_vars_readonly.yml \
+  -e target_cluster=my-spoke-cluster
+```
 
-   ```yaml
-   - name: "List nodes on the spoke"
-     kubernetes.core.k8s_info:
-       api_key: "{{ acm_spoke_token_resolver_spoke_token }}"
-       host: "{{ acm_spoke_token_resolver_spoke_api_url }}"
-       validate_certs: "{{ acm_spoke_token_resolver_spoke_validate_certs }}"
-       kind: Node
-     no_log: true
-   ```
+**Step 5 — Use the output facts** in your automation:
+
+```yaml
+- name: "List nodes on the spoke"
+  kubernetes.core.k8s_info:
+    api_key: "{{ acm_spoke_token_resolver_spoke_token }}"
+    host: "{{ acm_spoke_token_resolver_spoke_api_url }}"
+    validate_certs: "{{ acm_spoke_token_resolver_spoke_validate_certs }}"
+    kind: Node
+  no_log: true
+```
 
 ## 💡 Why this collection exists
 
