@@ -27,6 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install yamllint ansible-lint
+          ansible-galaxy collection install kubernetes.core
 
       - name: yamllint
         run: yamllint .
