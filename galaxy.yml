@@ -31,6 +31,7 @@ build_ignore:
   # --- hidden dirs and dotfiles (dev/CI tooling) ---
   - .ansible
   - .ansible-lint
+  - .github
   - .claude
   - .config
   - .github
