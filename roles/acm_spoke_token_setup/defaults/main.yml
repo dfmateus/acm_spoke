@@ -1,0 +1,72 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# =============================================================================
+# acm_spoke_token_setup - default variables
+# =============================================================================
+#
+# Provisions ManagedServiceAccount (MSA) + ManifestWork RBAC on the ACM Hub for
+# spoke/managed clusters. After setup, the acm_spoke_token_resolver role can
+# resolve temporary tokens for the provisioned clusters.
+#
+# Works with any Kubernetes distribution managed by ACM: OpenShift, AKS, EKS,
+# GKE, IKS, ROSA, ARO or vanilla K8s, as long as the cluster is imported as a
+# ManagedCluster on the Hub with the klusterlet running.
+#
+# The Hub SA must have write permission (create/update) on
+# ManagedServiceAccount, ManifestWork and ManagedClusterAddOn types. The
+# read-only SA used for token resolution is NOT sufficient for setup.
+# =============================================================================
+
+# --- ACM Hub connection ---
+
+# ACM Hub API URL (e.g., https://api.hub.example.com:6443).
+# In AAP, inject via a custom credential type.
+acm_spoke_token_setup_hub_url: ""
+
+# Bearer token for Hub authentication. Token from a ServiceAccount on the
+# Hub with write RBAC (create/update on MSA, ManifestWork, Addon).
+acm_spoke_token_setup_hub_token: ""
+
+# Validate TLS certificates when connecting to the Hub API.
+acm_spoke_token_setup_validate_certs: true
+
+# --- Target spoke cluster ---
+
+# ManagedCluster name on the Hub (OpenShift, AKS, EKS, GKE, IKS, etc.).
+# Corresponds to the Hub namespace where the MSA CR and ManifestWork reside.
+acm_spoke_token_setup_target_cluster: ""
+
+# --- ManagedServiceAccount configuration ---
+
+# ManagedServiceAccount CR name on the Hub. All spokes use the same MSA
+# name. The namespace (target_cluster) is what differentiates them.
+# Must match acm_spoke_token_resolver_msa_name so that the resolver can
+# find the resources created by setup.
+acm_spoke_token_setup_msa_name: "acm-spoke-automation"
+
+# ManifestWork CR name that deploys RBAC (ClusterRoleBinding) on the spoke.
+acm_spoke_token_setup_manifestwork_name: "acm-spoke-automation-rbac"
+
+# ClusterRole to bind to the MSA ServiceAccount on the spoke.
+# Defaults to cluster-admin for broad compatibility. Override for least
+# privilege if the downstream automation needs fewer permissions.
+acm_spoke_token_setup_spoke_cluster_role: "cluster-admin"
+
+# MSA token validity period. The klusterlet automatically renews the token
+# before expiration. Shorter values reduce the blast radius if the Hub
+# Secret is compromised; longer values reduce API churn.
+acm_spoke_token_setup_msa_validity: "720h"  # 30 days
+
+# --- Logging and masking ---
+
+# Masks sensitive data (tokens, secrets) in the AAP job output.
+# Default: true. Set to false ONLY for Hub login troubleshooting.
+acm_spoke_token_setup_no_log: "{{ var_no_log | default(true) | bool }}"
+
+# Character used in visual separator blocks in the output log.
+acm_spoke_token_setup_separator_char: "="
+
+# Padding added to separator blocks for readability.
+acm_spoke_token_setup_default_message_padding: 4
+...

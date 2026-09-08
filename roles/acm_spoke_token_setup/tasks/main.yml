@@ -1,0 +1,161 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Entry point: provisions ManagedServiceAccount + ManifestWork RBAC on the ACM Hub
+# for a spoke cluster. Idempotent: safe to re-run on clusters that already have
+# the CRs. All steps are inside block/rescue so that any failure produces a
+# single, actionable error message.
+#
+# Prerequisites: The Hub login must have write permission on the target
+# namespace. The read-only SA used for token resolution is not sufficient.
+# Use the acm-spoke-provisioner SA or equivalent with create/update on MSA,
+# ManifestWork and ManagedClusterAddOn.
+- name: "[SETUP] | Provision MSA + RBAC for the spoke cluster"
+  block:
+    - name: "[SETUP - Hub Login] | Authenticate to ACM Hub"
+      ansible.builtin.include_tasks: 1-hub_login.yml
+
+    # S.1) Verify that the ManagedCluster exists before creating anything
+    - name: "[SETUP] | Start provisioning"
+      ansible.builtin.debug:
+        msg: "{{ lookup('ansible.builtin.template', 'reports/stage_banner.j2').split('\n') }}"
+      vars:
+        acm_spoke_token_setup_banner_title: "⚙️ SETUP - Provisioning MSA + RBAC"
+        acm_spoke_token_setup_banner_lines:
+          - "📌 Target Cluster: {{ acm_spoke_token_setup_target_cluster }}"
+          - "🔑 MSA Name: {{ acm_spoke_token_setup_msa_name }}"
+          - "📋 ManifestWork: {{ acm_spoke_token_setup_manifestwork_name }}"
+
+    - name: "[SETUP] | S.1) Verify ManagedCluster exists"
+      kubernetes.core.k8s_info:
+        api_version: cluster.open-cluster-management.io/v1
+        kind: ManagedCluster
+        name: "{{ acm_spoke_token_setup_target_cluster }}"
+      register: __acm_setup_mc
+
+    - name: "[SETUP] | S.1) Assert ManagedCluster exists"
+      ansible.builtin.assert:
+        that:
+          - __acm_setup_mc.resources | length > 0
+        fail_msg: >-
+          ❌ FAILED! => ManagedCluster '{{ acm_spoke_token_setup_target_cluster }}'
+          not found on this Hub. Import the cluster first before running setup.
+        success_msg: >-
+          ✅ OK! => ManagedCluster '{{ acm_spoke_token_setup_target_cluster }}' found.
+
+    # S.2) Enable the managed-serviceaccount addon (idempotent)
+    - name: "[SETUP] | S.2) Enable managed-serviceaccount addon"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: addon.open-cluster-management.io/v1alpha1
+          kind: ManagedClusterAddOn
+          metadata:
+            name: managed-serviceaccount
+            namespace: "{{ acm_spoke_token_setup_target_cluster }}"
+          spec:
+            installNamespace: open-cluster-management-agent-addon
+      register: __acm_setup_addon_result
+
+    - name: "[SETUP] | S.2) Addon status"
+      ansible.builtin.debug:
+        msg: >-
+          {{ (__acm_setup_addon_result.changed)
+             | ternary('✅ Addon managed-serviceaccount enabled for '
+                       ~ acm_spoke_token_setup_target_cluster,
+                       '✅ Addon managed-serviceaccount already enabled for '
+                       ~ acm_spoke_token_setup_target_cluster) }}
+
+    # S.3) Create the ManagedServiceAccount CR (idempotent)
+    - name: "[SETUP] | S.3) Create ManagedServiceAccount CR"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: authentication.open-cluster-management.io/v1beta1
+          kind: ManagedServiceAccount
+          metadata:
+            name: "{{ acm_spoke_token_setup_msa_name }}"
+            namespace: "{{ acm_spoke_token_setup_target_cluster }}"
+          spec:
+            rotation:
+              enabled: true
+              validity: "{{ acm_spoke_token_setup_msa_validity }}"
+      register: __acm_setup_msa_result
+
+    - name: "[SETUP] | S.3) MSA status"
+      ansible.builtin.debug:
+        msg: >-
+          {{ (__acm_setup_msa_result.changed)
+             | ternary('✅ ManagedServiceAccount created: '
+                       ~ acm_spoke_token_setup_msa_name
+                       ~ ' (validity: ' ~ acm_spoke_token_setup_msa_validity ~ ')',
+                       '✅ ManagedServiceAccount already exists: '
+                       ~ acm_spoke_token_setup_msa_name) }}
+
+    # S.4) Deploy the ManifestWork RBAC (idempotent)
+    # The ManifestWork instructs the Hub to deploy a ClusterRoleBinding on the
+    # spoke that binds the MSA ServiceAccount to the configured ClusterRole.
+    - name: "[SETUP] | S.4) Deploy ManifestWork RBAC"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: work.open-cluster-management.io/v1
+          kind: ManifestWork
+          metadata:
+            name: "{{ acm_spoke_token_setup_manifestwork_name }}"
+            namespace: "{{ acm_spoke_token_setup_target_cluster }}"
+          spec:
+            workload:
+              manifests:
+                - apiVersion: rbac.authorization.k8s.io/v1
+                  kind: ClusterRoleBinding
+                  metadata:
+                    name: "{{ acm_spoke_token_setup_msa_name }}-{{ acm_spoke_token_setup_spoke_cluster_role }}"
+                  roleRef:
+                    apiGroup: rbac.authorization.k8s.io
+                    kind: ClusterRole
+                    name: "{{ acm_spoke_token_setup_spoke_cluster_role }}"
+                  subjects:
+                    - kind: ServiceAccount
+                      name: "{{ acm_spoke_token_setup_msa_name }}"
+                      namespace: open-cluster-management-agent-addon
+      register: __acm_setup_mw_result
+
+    - name: "[SETUP] | S.4) ManifestWork status"
+      ansible.builtin.debug:
+        msg: >-
+          {{ (__acm_setup_mw_result.changed)
+             | ternary('✅ ManifestWork deployed: '
+                       ~ acm_spoke_token_setup_manifestwork_name
+                       ~ ' (role: ' ~ acm_spoke_token_setup_spoke_cluster_role ~ ')',
+                       '✅ ManifestWork already exists: '
+                       ~ acm_spoke_token_setup_manifestwork_name) }}
+
+    # S.5) Wait for the klusterlet to provision the token
+    - name: "[SETUP] | S.5) Wait for klusterlet to report MSA Secret"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Secret
+        name: "{{ acm_spoke_token_setup_msa_name }}"
+        namespace: "{{ acm_spoke_token_setup_target_cluster }}"
+      register: __acm_setup_secret_check
+      until: __acm_setup_secret_check.resources | length > 0
+      retries: 12  # 12 x 10 seconds = 2 minutes maximum wait
+      delay: 10  # seconds
+      no_log: "{{ acm_spoke_token_setup_no_log }}"
+
+    - name: "[SETUP] | Provisioning complete"
+      ansible.builtin.debug:
+        msg: "{{ lookup('ansible.builtin.template', 'reports/setup_summary.j2').split('\n') }}"
+
+  rescue:
+    - name: "[RESCUE] | Spoke cluster provisioning failed"
+      ansible.builtin.fail:
+        msg: >-
+          ❌ FAILED! => Could not provision MSA + RBAC for cluster
+          '{{ acm_spoke_token_setup_target_cluster }}'.
+          Check the Hub SA permissions (needs create/update on MSA,
+          ManifestWork and ManagedClusterAddOn), Hub connectivity, and the
+          ManagedCluster status.
+          Details: {{ ansible_failed_result.msg | default('No details available') }}
+...

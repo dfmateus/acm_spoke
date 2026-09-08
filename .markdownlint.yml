@@ -1,0 +1,49 @@
+---
+default: true
+
+# MD003/heading-style - ATX headings only (# Heading)
+MD003:
+  style: atx
+
+# MD004/ul-style - Disabled (project uses both * and - for lists by convention)
+MD004: false
+
+# MD009/no-trailing-spaces - Disabled (intentional trailing spaces in tables/breaks)
+MD009: false
+
+# MD013/line-length - Disabled (matches yamllint relaxed line-length policy)
+MD013: false
+
+# MD022/blanks-around-headings - Disabled (repo style uses tight heading groups)
+MD022: false
+
+# MD024/no-duplicate-heading - Disabled (sections reuse headings like "Applied Fix" across contexts)
+MD024: false
+
+# MD026/no-trailing-punctuation - Disabled (headings may end with ? or : intentionally)
+MD026: false
+
+# MD028/no-blanks-blockquote - Disabled (blockquote formatting is intentional in multi-line quotes)
+MD028: false
+
+# MD032/blanks-around-lists - Disabled (lists immediately after --- separators is intentional)
+MD032: false
+
+# MD033/no-inline-html - Allow <br> for line breaks in tables
+MD033:
+  allowed_elements:
+    - br
+
+# MD040/fenced-code-language - Disabled (ASCII diagrams use bare fences per markdown-docs.md)
+MD040: false
+
+# MD046/code-block-style - Fenced code blocks only
+MD046:
+  style: fenced
+
+# MD048/code-fence-style - Disabled (README uses ~~~ tildes, other docs use ``` backticks)
+MD048: false
+
+# MD060/table-column-style - Disabled (compact pipe style |col|col| is the project convention)
+MD060: false
+...

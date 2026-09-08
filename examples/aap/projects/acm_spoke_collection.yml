@@ -1,0 +1,29 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Project: ACM Spoke Collection (main)
+#
+# Points to the dfmateus.acm_spoke collection repository. AAP syncs
+# the project from the configured SCM URL and branch. The collection
+# must be installed in the Execution Environment; the project provides
+# the playbooks only.
+#
+# Import via infra.controller_configuration.projects role.
+# Variable name for CaC: controller_projects
+
+controller_projects:
+  - name: "ACM Spoke Collection (main)"
+    description: >-
+      Source repository for the dfmateus.acm_spoke Ansible collection.
+      Contains the playbooks (bootstrap, setup, resolver) and role
+      definitions for managing spoke cluster credentials via the ACM
+      ManagedServiceAccount API. The collection itself must be installed
+      in the Execution Environment; this project provides the playbook
+      entry points.
+    organization: "<ORGANIZATION>"
+    scm_type: git
+    scm_url: "<REPOSITORY_URL>"  # e.g., https://github.com/dfmateus/acm_spoke.git
+    scm_branch: main
+    scm_update_on_launch: true
+    default_environment: "EE - ACM Spoke 1.0.0"
+...

@@ -1,0 +1,32 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+galaxy_info:
+  author: "Diego Felipe Mateus"
+  role_name: "acm_spoke_hub_rbac_setup"
+  namespace: "dfmateus"
+  description: >-
+    Provisions ServiceAccounts and RBAC on the ACM Hub for the
+    acm_spoke_token_setup (write) and acm_spoke_token_resolver (read-only)
+    roles. Creates two SAs with least-privilege permissions and long-lived
+    tokens. Requires cluster-admin on the Hub. Idempotent.
+  license: "GPL-3.0-or-later"
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+    - name: Fedora
+      versions:
+        - all
+  galaxy_tags:
+    - acm
+    - rhacm
+    - openshift
+    - kubernetes
+    - spoke
+    - rbac
+    - serviceaccount
+
+dependencies: []
+...

@@ -1,0 +1,123 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+argument_specs:
+  main:
+    short_description: >-
+      Resolve a temporary bearer token for any ACM-managed spoke cluster.
+    description:
+      - >-
+        Resolves a temporary bearer token for any spoke/managed cluster
+        registered in a RHACM Hub, using the ManagedServiceAccount (MSA)
+        API. Works with any Kubernetes distribution: OpenShift, AKS, EKS,
+        GKE, IKS, ROSA, ARO, or vanilla K8s, as long as the cluster is
+        imported as a ManagedCluster on the Hub with the klusterlet running.
+      - >-
+        Instead of maintaining a static credential per cluster, the
+        automation authenticates once on the ACM Hub and the role returns
+        a spoke_token + spoke_api_url pair that any downstream automation
+        can consume.
+      - >-
+        Output facts set by this role:
+        acm_spoke_token_resolver_spoke_token (bearer token for the spoke)
+        and acm_spoke_token_resolver_spoke_api_url (API URL of the spoke).
+    options:
+      acm_spoke_token_resolver_hub_url:
+        type: str
+        required: true
+        description: >-
+          API URL of the ACM Hub (e.g., https://api.hub.example.com:6443).
+          In AAP, inject via a custom credential type. Never hardcode
+          tokens or URLs in Job Template variables.
+
+      acm_spoke_token_resolver_hub_token:
+        type: str
+        required: true
+        no_log: true
+        description: >-
+          Bearer token for authentication on the Hub. Must belong to a
+          ServiceAccount with read-only RBAC. The SA needs only get/list
+          on five resource types: ManagedCluster, ManagedClusterAddOn,
+          ManagedServiceAccount, Secret, and ManifestWork.
+
+      acm_spoke_token_resolver_validate_certs:
+        type: bool
+        required: false
+        default: true
+        description: >-
+          Validate TLS certificates when connecting to the Hub API.
+
+      acm_spoke_token_resolver_spoke_validate_certs:
+        type: str
+        required: false
+        default: "auto"
+        description: >-
+          Validate TLS certificates when connecting to the spoke API.
+          Accepts "auto" (default), "true", or "false". When set to
+          "auto", the role auto-detects from the ManagedCluster CR
+          vendor label: OpenShift (ARO, ROSA, OCP) sets true;
+          non-OpenShift platforms (AKS, EKS, GKE, IKS, vanilla K8s)
+          set false because their internal CAs are not in the
+          Execution Environment trust store. Override manually for
+          specific cases.
+
+      acm_spoke_token_resolver_target_cluster:
+        type: str
+        required: true
+        description: >-
+          Name of the ManagedCluster on the Hub (OpenShift, AKS, EKS,
+          GKE, IKS, etc.). Corresponds to the namespace on the Hub
+          where the MSA Secret and ManifestWork are located.
+
+      acm_spoke_token_resolver_msa_name:
+        type: str
+        required: false
+        default: "acm-spoke-automation"
+        description: >-
+          Name of the ManagedServiceAccount CR on the Hub. All spokes
+          use the same MSA name; the namespace (target_cluster)
+          differentiates them. Change only if your organization uses
+          a different naming convention.
+
+      acm_spoke_token_resolver_manifestwork_name:
+        type: str
+        required: false
+        default: "acm-spoke-automation-rbac"
+        description: >-
+          Name of the ManifestWork CR that deploys RBAC
+          (ClusterRoleBinding) on the spoke. The preflight check
+          validates that this ManifestWork exists and has status
+          Applied before attempting to use the token.
+
+      acm_spoke_token_resolver_no_log:
+        type: bool
+        required: false
+        default: true
+        description: >-
+          Mask sensitive data (tokens, secrets) in the job output.
+          Defaults to the value of var_no_log if defined, otherwise
+          true. Set to false only for Hub login troubleshooting.
+
+      acm_spoke_token_resolver_separator_char:
+        type: str
+        required: false
+        default: "*"
+        description: >-
+          Character used in visual separator blocks in log output.
+
+      acm_spoke_token_resolver_default_message_padding:
+        type: int
+        required: false
+        default: 4
+        description: >-
+          Padding added to visual separator blocks for readability.
+
+      var_no_log:
+        type: bool
+        required: false
+        default: true
+        description: >-
+          Convenience variable that sets the no_log default for all
+          roles in a single place. Each role's no_log variable falls
+          back to this value when defined.
+...

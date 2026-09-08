@@ -1,0 +1,34 @@
+{# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com> #}
+{# SPDX-License-Identifier: GPL-3.0-or-later #}
+======================================================================
+ ✅ HUB RBAC SETUP COMPLETED
+======================================================================
+
+ [PROVISIONED RESOURCES]
+   * Namespace:          {{ acm_spoke_hub_rbac_setup_namespace }}
+   * Provisioner SA:     {{ acm_spoke_hub_rbac_setup_provisioner_sa_name }}
+   * Provisioner Role:   {{ acm_spoke_hub_rbac_setup_provisioner_clusterrole_name }}
+   * Reader SA:          {{ acm_spoke_hub_rbac_setup_reader_sa_name }}
+   * Reader Role:        {{ acm_spoke_hub_rbac_setup_reader_clusterrole_name }}
+
+ [PROVISIONER TOKEN] (for hub_vars_admin.yml)
+   * Secret:             {{ acm_spoke_hub_rbac_setup_provisioner_token_secret_name }}
+   * Token Length:        {{ __hub_rbac_provisioner_token | length }} chars (masked)
+
+ [READER TOKEN] (for hub_vars_readonly.yml)
+   * Secret:             {{ acm_spoke_hub_rbac_setup_reader_token_secret_name }}
+   * Token Length:        {{ __hub_rbac_reader_token | length }} chars (masked)
+
+ [DISCOVERED MANAGED CLUSTERS] ({{ __hub_rbac_discovered_clusters | length }} found, excluding local-cluster)
+{% for cluster in __hub_rbac_discovered_clusters %}
+   * {{ cluster }}
+{% endfor %}
+{% if __hub_rbac_discovered_clusters | length == 0 %}
+   ⚠️ No ManagedClusters found. Import clusters into the Hub first.
+{% endif %}
+
+ [NEXT STEPS]
+   Run bootstrap_hub_spoke.yml to provision all discovered spokes:
+      ansible-playbook playbooks/bootstrap_hub_spoke.yml \
+        -e @.local/hub_vars_full.yml
+======================================================================

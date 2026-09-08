@@ -1,0 +1,49 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Job Template: ACM Spoke Setup
+#
+# Provisions MSA CR, ManifestWork RBAC, and waits for the klusterlet
+# to report the spoke token. Supports single or multiple clusters.
+# Use this JT to onboard individual spokes without re-running the
+# full bootstrap.
+#
+# Import via infra.controller_configuration.job_templates role.
+# Variable name for CaC: controller_templates
+
+controller_templates:
+  - name: "JT - ACM Spoke - <ENV> - Setup Spoke Cluster"
+    description: >-
+      Provisions ManagedServiceAccount CR, ManifestWork with RBAC, and
+      ManagedClusterAddOn on the Hub for the target spoke cluster(s).
+      Waits for the klusterlet to reconcile and report the spoke token
+      back to the Hub. Uses the acm-spoke-provisioner ServiceAccount,
+      which has write access to create these resources but no
+      cluster-admin. Idempotent: re-running against an already-provisioned
+      spoke changes nothing.
+    organization: "<ORGANIZATION>"
+    project: "ACM Spoke Collection (main)"
+    playbook: "playbooks/setup_spoke_cluster.yml"
+    inventory: "ACM Spoke - <ENV>"
+    execution_environment: "EE - ACM Spoke 1.0.0"
+    credentials:
+      - "ACM Spoke - Hub Provisioner (<ENV>)"  # Credential Type: ACM Spoke Setup - Hub
+    verbosity: 1
+    extra_vars:
+      var_no_log: true
+    survey_enabled: true
+    survey_spec:
+      name: "Setup Survey"
+      description: "Target spoke cluster(s) to provision"
+      spec:
+        - question_name: "Target Cluster Name (Required)"
+          question_description: >-
+            The ManagedCluster name in RHACM. Enter the exact name from
+            oc get managedclusters on the Hub (e.g., spoke-aro-01).
+            For multiple clusters in a single run, use the bootstrap JT
+            or pass target_clusters (plural) as a JSON list via extra vars.
+          variable: target_cluster
+          type: text
+          required: true
+          default: ""
+...

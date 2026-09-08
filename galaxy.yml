@@ -1,0 +1,107 @@
+---
+# galaxy.yml - Ansible Galaxy collection metadata
+# https://docs.ansible.com/ansible/latest/dev_guide/collections_galaxy_meta.html
+namespace: dfmateus
+name: acm_spoke
+version: 1.0.0
+description: >-
+  Spoke cluster access automation for Red Hat Advanced Cluster Management (RHACM 2.10+).
+  Resolves temporary ManagedServiceAccount (MSA) tokens from the ACM Hub and provisions
+  the MSA infrastructure (addon, MSA CR, ManifestWork RBAC) for spoke clusters.
+  Supports OpenShift, ARO, ROSA, AKS, EKS, GKE, IKS, and vanilla Kubernetes.
+authors:
+  - Diego Felipe Mateus <dfmateus@hotmail.com>
+license:
+  - GPL-3.0-or-later
+
+repository: https://github.com/dfmateus/acm_spoke
+documentation: https://github.com/dfmateus/acm_spoke/blob/main/README.md
+homepage: https://github.com/dfmateus/acm_spoke
+issues: https://github.com/dfmateus/acm_spoke/issues
+readme: README.md
+
+# Collection dependencies
+dependencies:
+  kubernetes.core: ">=3.0.0"
+
+# Files and directories excluded from the built collection artifact.
+# Rule of thumb: only roles/, playbooks/, plugins/, files/, docs/, examples/*.yml,
+# meta/, galaxy.yml, README.md, LICENSE, and CHANGELOG.rst ship to consumers.
+build_ignore:
+  # --- hidden dirs and dotfiles (dev/CI tooling) ---
+  - .ansible
+  - .ansible-lint
+  - .claude
+  - .config
+  - .github
+  - .gitignore
+  - .gitattributes
+  - .kube
+  - .local
+  - .markdownlint.yml
+  - .markdownlint-cli2.yaml
+  - .shellcheckrc
+  - .vscode
+  - .yamllint.yml
+  - .agents
+  - .cursor
+  - .mcp.json
+  - CLAUDE.md
+  # --- role-level dotfiles (dev tooling, not collection content) ---
+  - "roles/*/.ansible-lint"
+  - "roles/*/.gitattributes"
+  - "roles/*/.gitignore"
+  - "roles/*/.yamllint.yml"
+  # --- dev and operational content (not collection artifact) ---
+  - changelogs
+  - collections
+  - CODE_OF_CONDUCT.md
+  - CONTRIBUTING.md
+  - CONTRIBUTORS.md
+  - SECURITY.md
+  - ansible.cfg
+  - Makefile
+  - molecule
+  - context
+  # --- scratch, secrets, build output ---
+  - "*.env"
+  - ".env*"
+  - "*.key"
+  - "*.crt"
+  - "*.id_rsa"
+  - "*.log"
+  - "*.pem"
+  - "*.pyc"
+  - "*.retry"
+  - "*.tar.gz"
+  - "*vault*"
+  - "*env*.sh"
+  - env-setup.sh
+  - .collections
+  - .python_history
+  - __pycache__
+  - ansible-navigator.log
+  - secrets.yml
+  - tmp
+
+tags:
+  - cloud
+  - infrastructure
+  - rhacm
+  - openshift
+  - kubernetes
+  - azure
+  - aws
+  - acm
+  - multicluster
+  - spoke
+  - msa
+  - serviceaccount
+  - token
+  - rbac
+  - aks
+  - eks
+  - gke
+  - rosa
+  - aro
+...

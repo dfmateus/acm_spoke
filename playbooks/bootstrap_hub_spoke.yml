@@ -1,0 +1,155 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Full Hub-to-Spoke bootstrap: provisions SAs on the Hub, configures spokes, and validates.
+# Runs ONCE per Hub for initial setup. Idempotent: safe to re-run.
+#
+# Automatically chains all 3 steps without manual intervention:
+#   Step 0) Create SAs and RBAC on the Hub + discover ManagedClusters (cluster-admin)
+#   Step 1) Provision MSA + ManifestWork RBAC on each spoke (provisioner SA)
+#   Step 2) Resolve and validate each spoke's token (reader SA)
+#
+# Auto-discovery: if target_clusters is NOT provided, the playbook uses all
+# ManagedClusters discovered by the role in step 0 (except local-cluster).
+#
+# Usage (auto-discovery -- processes ALL spokes):
+#   ansible-playbook playbooks/bootstrap_hub_spoke.yml \
+#     -e @.local/hub_vars_full.yml
+#
+# Usage (explicit list):
+#   ansible-playbook playbooks/bootstrap_hub_spoke.yml \
+#     -e @.local/hub_vars_full.yml \
+#     -e '{"target_clusters": ["spoke-01", "spoke-02"]}'
+#
+# Required variables (in hub_vars_full.yml):
+#   acm_spoke_hub_rbac_setup_hub_url    - ACM Hub API URL
+#   acm_spoke_hub_rbac_setup_hub_token  - cluster-admin token on the Hub
+#
+# Optional variables:
+#   target_clusters                     - List of clusters to provision
+#     Simple:   ["cluster-01", "cluster-02"]
+#     With override: [{"name": "cluster-01"}]
+#
+# Spoke TLS: automatic detection from the ManagedCluster CR 'vendor' label.
+# OpenShift (ARO, ROSA, OCP) = validate_certs true, others (AKS, EKS, GKE)
+# = false. Manual override via
+# acm_spoke_token_resolver_spoke_validate_certs: true|false.
+#
+# Idempotency and new spokes:
+#   Safe to re-run at any time. Existing resources are not altered.
+#   When a new ManagedCluster is imported on the Hub, simply re-run this
+#   playbook: auto-discovery detects the new spoke, step 1 provisions MSA +
+#   ManifestWork only for it, and step 2 validates all (new and existing).
+#   The resolver alone (resolve_spoke_access.yml) does NOT provision new spokes --
+#   it is read-only and fails if the MSA CR does not exist. For new spokes,
+#   always go through bootstrap (this playbook) or individual setup first.
+#
+# Prerequisites:
+#   The provided token must belong to a user with cluster-admin on the Hub.
+#   For explicit list: clusters must be imported as ManagedCluster.
+
+# ===========================================================================
+# STEP 0: Create SAs and RBAC on the Hub + discover ManagedClusters
+# ===========================================================================
+- name: "Step 0 - Provision SAs, RBAC and discover ManagedClusters"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: "[HUB SPOKE] | Step 0 - Create SAs and RBAC on the Hub"
+      ansible.builtin.include_role:
+        name: dfmateus.acm_spoke.acm_spoke_hub_rbac_setup
+
+    # --- Build the list of clusters to process ---
+    # If target_clusters was provided, use it as a filter (dicts or strings).
+    # Otherwise, use all clusters discovered by the role (auto-discovery).
+    - name: "[HUB SPOKE] | Use provided target_clusters (dicts)"
+      when:
+        - target_clusters is defined
+        - target_clusters | length > 0
+        - (target_clusters | first) is mapping
+      ansible.builtin.set_fact:
+        __bootstrap_clusters: "{{ target_clusters }}"
+
+    - name: "[HUB SPOKE] | Use provided target_clusters (strings)"
+      when:
+        - target_clusters is defined
+        - target_clusters | length > 0
+        - (target_clusters | first) is string
+      ansible.builtin.set_fact:
+        __bootstrap_clusters: "{{ __bootstrap_clusters | default([]) + [{'name': item}] }}"
+      loop: "{{ target_clusters }}"
+      loop_control:
+        label: "{{ item }}"
+
+    # Auto-discovery: use the acm_spoke_hub_rbac_setup_discovered_clusters fact
+    # that the role registered after listing ManagedClusters.
+    - name: "[HUB SPOKE] | Auto-discovery -- use all ManagedClusters"
+      when: target_clusters is not defined or target_clusters | length == 0
+      ansible.builtin.set_fact:
+        __bootstrap_clusters: "{{ __bootstrap_clusters | default([]) + [{'name': item}] }}"
+      loop: "{{ acm_spoke_hub_rbac_setup_discovered_clusters }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: "[HUB SPOKE] | Final list of clusters to process"
+      ansible.builtin.debug:
+        msg:
+          - "📋 Clusters to process: {{ __bootstrap_clusters | length }}"
+          - "   {{ __bootstrap_clusters | map(attribute='name') | join(', ') }}"
+
+# ===========================================================================
+# STEP 1: Provision MSA + RBAC on each spoke
+# ===========================================================================
+- name: "Step 1 - Provision MSA + ManifestWork RBAC on spokes"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: "[HUB SPOKE] | Assert clusters are available to process"
+      ansible.builtin.assert:
+        that:
+          - __bootstrap_clusters | default([]) | length > 0
+        fail_msg: >-
+          ❌ FAILED! => No ManagedCluster found or provided.
+          Check whether the Hub has imported ManagedClusters.
+        success_msg: >-
+          ✅ OK! => {{ __bootstrap_clusters | length }} cluster(s) to provision.
+
+    - name: "[HUB SPOKE] | Step 1 - Provision spoke {{ __cluster.name }}"
+      ansible.builtin.include_role:
+        name: dfmateus.acm_spoke.acm_spoke_token_setup
+      loop: "{{ __bootstrap_clusters }}"
+      loop_control:
+        loop_var: __cluster
+        label: "{{ __cluster.name }}"
+      vars:
+        acm_spoke_token_setup_hub_url: "{{ acm_spoke_hub_rbac_setup_hub_url }}"
+        acm_spoke_token_setup_hub_token: "{{ acm_spoke_hub_rbac_setup_provisioner_token }}"
+        acm_spoke_token_setup_validate_certs: "{{ acm_spoke_hub_rbac_setup_validate_certs | default(true) }}"
+        acm_spoke_token_setup_target_cluster: "{{ __cluster.name }}"
+
+# ===========================================================================
+# STEP 2: Resolve and validate each spoke's token
+# ===========================================================================
+- name: "Step 2 - Resolve and validate access to each spoke"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: "[HUB SPOKE] | Step 2 - Resolve spoke {{ __cluster.name }}"
+      ansible.builtin.include_role:
+        name: dfmateus.acm_spoke.acm_spoke_token_resolver
+      loop: "{{ __bootstrap_clusters }}"
+      loop_control:
+        loop_var: __cluster
+        label: "{{ __cluster.name }}"
+      vars:
+        acm_spoke_token_resolver_hub_url: "{{ acm_spoke_hub_rbac_setup_hub_url }}"
+        acm_spoke_token_resolver_hub_token: "{{ acm_spoke_hub_rbac_setup_reader_token }}"
+        acm_spoke_token_resolver_validate_certs: "{{ acm_spoke_hub_rbac_setup_validate_certs | default(true) }}"
+        acm_spoke_token_resolver_target_cluster: "{{ __cluster.name }}"
+...

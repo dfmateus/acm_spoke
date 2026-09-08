@@ -1,0 +1,34 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Job Template: ACM Spoke Hub RBAC Setup
+#
+# Creates ServiceAccounts and RBAC on the ACM Hub. Standalone version
+# of Step 0 in the bootstrap playbook. Use when the Hub setup is
+# separated from spoke provisioning (different operators or schedules).
+#
+# Import via infra.controller_configuration.job_templates role.
+# Variable name for CaC: controller_templates
+
+controller_templates:
+  - name: "JT - ACM Spoke - <ENV> - Setup Hub RBAC"
+    description: >-
+      Creates the acm-spoke-provisioner and acm-spoke-reader
+      ServiceAccounts with least-privilege RBAC on the ACM Hub. Runs
+      once per Hub with a cluster-admin credential. After execution,
+      the provisioner and reader SA tokens are displayed in the job
+      output. Use this JT when Hub RBAC setup is handled by a different
+      operator than spoke provisioning. If you prefer to run everything
+      in a single step, use the Bootstrap JT instead.
+    organization: "<ORGANIZATION>"
+    project: "ACM Spoke Collection (main)"
+    playbook: "playbooks/setup_hub_rbac.yml"
+    inventory: "ACM Spoke - <ENV>"
+    execution_environment: "EE - ACM Spoke 1.0.0"
+    credentials:
+      - "ACM Spoke - Hub Admin (<ENV>)"  # Credential Type: ACM Spoke Bootstrap - Hub
+    verbosity: 1
+    extra_vars:
+      var_no_log: true
+    survey_enabled: false
+...

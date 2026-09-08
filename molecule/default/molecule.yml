@@ -1,0 +1,43 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# molecule/default/molecule.yml
+# Default molecule scenario: validates collection structure, role defaults,
+# and basic role loading without requiring any cluster access.
+#
+# This project targets the Kubernetes API (hosts: localhost, no SSH), so
+# molecule runs with the "default" driver and no managed instances. The
+# converge and verify playbooks exercise role defaults loading and offline
+# assertions only.
+#
+# Usage:
+#   molecule test                  # full create/converge/verify/destroy
+#   molecule converge              # run converge.yml only
+#   molecule verify                # run verify.yml only (after converge)
+dependency:
+  name: galaxy
+  options:
+    requirements-file: collections/requirements.yml
+driver:
+  name: default
+platforms:
+  - name: instance
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      # Points molecule at the project's roles directory so include_role
+      # and include_vars can find them by short name.
+      roles_path: ../../roles
+  inventory:
+    host_vars:
+      localhost:
+        ansible_connection: local
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  lint: |
+    set -e
+    yamllint -c ../../.yamllint.yml .
+    ansible-lint -c ../../.ansible-lint
+verifier:
+  name: ansible
+...

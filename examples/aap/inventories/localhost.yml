@@ -1,0 +1,31 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Inventory: ACM Spoke - <ENV>
+#
+# All playbooks in this collection run as hosts: localhost with
+# connection: local. The target clusters are selected via survey
+# variables (target_cluster / target_clusters), not by inventory
+# hosts. This inventory exists only to satisfy the AAP JT
+# requirement for an assigned inventory.
+#
+# Import via infra.controller_configuration.inventories role.
+# Variable name for CaC: controller_inventories
+
+controller_inventories:
+  - name: "ACM Spoke - <ENV>"
+    description: >-
+      Static localhost inventory for all ACM Spoke job templates. The
+      collection runs locally and connects to the Hub and spoke clusters
+      via API calls using injected credentials, so no remote hosts are
+      needed. Target clusters are selected via survey variables, not
+      inventory hosts.
+    organization: "<ORGANIZATION>"
+    kind: ""
+    variables:
+      ansible_connection: local
+      ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    hosts:
+      - name: localhost
+        variables: {}
+...

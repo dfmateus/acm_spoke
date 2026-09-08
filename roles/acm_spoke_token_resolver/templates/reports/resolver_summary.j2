@@ -1,0 +1,24 @@
+{# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com> #}
+{# SPDX-License-Identifier: GPL-3.0-or-later #}
+======================================================================
+ ✅ SPOKE TOKEN RESOLUTION COMPLETED
+======================================================================
+
+ [RESOLVED ACCESS]
+   * Target Cluster:     {{ acm_spoke_token_resolver_target_cluster }}
+   * Spoke API URL:      {{ acm_spoke_token_resolver_spoke_api_url }}
+   * Token Length:        {{ acm_spoke_token_resolver_spoke_token | length }} chars (masked)
+   * Validation:         HTTP 200 on GET /apis ✅
+
+ [OUTPUT FACTS]
+   * acm_spoke_token_resolver_spoke_token    → bearer token for the spoke
+   * acm_spoke_token_resolver_spoke_api_url  → spoke API endpoint
+
+ [HUB DETAILS]
+   * Hub URL:            {{ acm_spoke_token_resolver_hub_url }}
+   * MSA Name:           {{ acm_spoke_token_resolver_msa_name }}
+   * ManifestWork:       {{ acm_spoke_token_resolver_manifestwork_name }}
+   * Hub TLS:            {{ acm_spoke_token_resolver_validate_certs | ternary('enabled', 'disabled') }}
+   * Spoke Vendor:       {{ __acm_spoke_vendor | default('Unknown') }}
+   * Spoke TLS:          {{ __acm_spoke_tls_resolved | ternary('enabled', 'disabled') }} (mode={{ acm_spoke_token_resolver_spoke_validate_certs }})
+======================================================================

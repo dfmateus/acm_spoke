@@ -1,0 +1,46 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Generic spoke token resolution.
+# Resolves a temporary token for any spoke cluster managed by ACM
+# (OpenShift, AKS, EKS, GKE, IKS, vanilla K8s).
+# The output facts (acm_spoke_token_resolver_spoke_token and
+# acm_spoke_token_resolver_spoke_api_url) can be consumed by any
+# downstream automation.
+#
+# Usage:
+#   ansible-playbook playbooks/resolve_spoke_access.yml \
+#     -e target_cluster=my-spoke-cluster
+#
+# Prerequisite: the spoke must have been provisioned first (MSA CR + ManifestWork
+# created via bootstrap_hub_spoke.yml or setup_spoke_cluster.yml). This playbook
+# is read-only -- it does not create resources. If the MSA CR does not exist for
+# the spoke, the preflight fails with a clear error indicating that setup needs
+# to be run.
+#
+# Required variables (inject via credential type in AAP or extra-vars):
+#   acm_spoke_token_resolver_hub_url   - ACM Hub API URL
+#   acm_spoke_token_resolver_hub_token - SA bearer token on the Hub
+#   target_cluster                     - ManagedCluster name on the Hub
+- name: "Resolve spoke access via ACM Hub"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: "[RESOLVER] | Resolve MSA access for the target cluster"
+      ansible.builtin.include_role:
+        name: dfmateus.acm_spoke.acm_spoke_token_resolver
+      vars:
+        acm_spoke_token_resolver_target_cluster: "{{ target_cluster }}"
+
+    - name: "[RESOLVER] | Display resolution result"
+      ansible.builtin.debug:
+        msg:
+          - "✅ Spoke access resolved successfully."
+          - "  spoke_api_url: {{ acm_spoke_token_resolver_spoke_api_url }}"
+          - ""
+          - "Output facts available for downstream roles:"
+          - "  acm_spoke_token_resolver_spoke_token"
+          - "  acm_spoke_token_resolver_spoke_api_url"
+...

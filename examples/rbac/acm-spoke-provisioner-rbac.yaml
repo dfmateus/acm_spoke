@@ -1,0 +1,77 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# acm-spoke-provisioner: Write ServiceAccount for the acm_spoke_token_setup role.
+# Can create/update MSA, ManifestWork and ManagedClusterAddOn on the Hub.
+# Does NOT require cluster-admin -- only the minimum permissions to provision.
+#
+# Apply once on the Hub:
+#   oc apply -f examples/rbac/acm-spoke-provisioner-rbac.yaml --context <hub-context>
+#
+# Generate a long-lived token (after applying):
+#   oc get secret acm-spoke-provisioner-token -n open-cluster-management \
+#     --context <hub-context> -o jsonpath='{.data.token}' | base64 -d && echo
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: acm-spoke-provisioner
+  namespace: open-cluster-management
+...
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: acm-spoke-provisioner
+rules:
+  # ManagedCluster: verify the cluster exists before provisioning.
+  - apiGroups: ["cluster.open-cluster-management.io"]
+    resources: ["managedclusters"]
+    verbs: ["get"]
+
+  # ManagedClusterAddOn: enable the managed-serviceaccount addon.
+  - apiGroups: ["addon.open-cluster-management.io"]
+    resources: ["managedclusteraddons"]
+    verbs: ["get", "create", "update", "patch"]
+
+  # ManagedServiceAccount: create and update MSA CRs.
+  - apiGroups: ["authentication.open-cluster-management.io"]
+    resources: ["managedserviceaccounts"]
+    verbs: ["get", "create", "update", "patch"]
+
+  # ManifestWork: deploy RBAC (ClusterRoleBinding) on the spokes.
+  - apiGroups: ["work.open-cluster-management.io"]
+    resources: ["manifestworks"]
+    verbs: ["get", "create", "update", "patch"]
+
+  # Secret: verify whether the klusterlet reported the MSA token.
+  # Scoped to the MSA Secret name only (least privilege).
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["acm-spoke-automation"]
+    verbs: ["get"]
+...
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: acm-spoke-provisioner
+subjects:
+  - kind: ServiceAccount
+    name: acm-spoke-provisioner
+    namespace: open-cluster-management
+roleRef:
+  kind: ClusterRole
+  name: acm-spoke-provisioner
+  apiGroup: rbac.authorization.k8s.io
+...
+---
+# Long-lived token (Kubernetes 1.24+)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: acm-spoke-provisioner-token
+  namespace: open-cluster-management
+  annotations:
+    kubernetes.io/service-account.name: acm-spoke-provisioner
+type: kubernetes.io/service-account-token
+...

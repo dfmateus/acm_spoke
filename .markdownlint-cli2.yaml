@@ -1,0 +1,11 @@
+---
+# .markdownlint-cli2.yaml - markdownlint-cli2 project configuration
+# Run: npx markdownlint-cli2 "**/*.md"
+
+# Ignore paths that contain vendored, generated, or tool-managed Markdown
+ignores:
+  - ".ansible/**"
+  - ".claude/**"
+  - "node_modules/**"
+  - "**/node_modules/**"
+...

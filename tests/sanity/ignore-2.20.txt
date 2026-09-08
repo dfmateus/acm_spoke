@@ -1,0 +1,2 @@
+examples/rbac/acm-spoke-provisioner-rbac.yaml yamllint!skip
+examples/rbac/acm-spoke-reader-rbac.yaml yamllint!skip

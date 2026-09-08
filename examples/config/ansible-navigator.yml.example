@@ -1,0 +1,23 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# ansible-navigator.yml
+# Copy to .local/config/ansible-navigator.yml and adjust the EE image name.
+# Reference via: ANSIBLE_NAVIGATOR_CONFIG=.local/config/ansible-navigator.yml
+ansible-navigator:
+  execution-environment:
+    image: localhost/acm-spoke-token-resolver-ee:1.0.0
+    enabled: true
+    container-engine: podman
+    pull:
+      policy: missing
+    volume-mounts: []
+  playbook-artifact:
+    enable: false
+
+  mode: stdout
+
+  logging:
+    level: critical
+    file: .local/tmp/logs/ansible-navigator.log
+...

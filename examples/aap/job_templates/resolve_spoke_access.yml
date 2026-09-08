@@ -1,0 +1,49 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Job Template: ACM Spoke Resolver
+#
+# Read-only operation: resolves a temporary spoke token from the Hub
+# MSA Secret and publishes it via set_stats for downstream JT nodes
+# in a Workflow Template. This is the JT used in daily operations.
+#
+# Import via infra.controller_configuration.job_templates role.
+# Variable name for CaC: controller_templates
+
+controller_templates:
+  - name: "JT - ACM Spoke - <ENV> - Resolve Spoke Token"
+    description: >-
+      Resolves a temporary spoke cluster token from the Hub using the
+      ManagedServiceAccount API. Uses the acm-spoke-reader ServiceAccount,
+      which has read-only access to 5 resource types on the Hub and zero
+      permissions on any spoke. Publishes the resolved token, API URL,
+      and TLS setting via ansible.builtin.set_stats so downstream JT
+      nodes in a Workflow Template can consume them as extra_vars. This
+      is the JT for daily operations. It never creates or modifies any
+      resource.
+    organization: "<ORGANIZATION>"
+    project: "ACM Spoke Collection (main)"
+    playbook: "playbooks/resolve_spoke_access.yml"
+    inventory: "ACM Spoke - <ENV>"
+    execution_environment: "EE - ACM Spoke 1.0.0"
+    credentials:
+      - "ACM Spoke - Hub Reader (<ENV>)"  # Credential Type: ACM Spoke Resolver - Hub
+    verbosity: 1
+    extra_vars:
+      var_no_log: true
+    survey_enabled: true
+    survey_spec:
+      name: "Resolver Survey"
+      description: "Target spoke cluster to resolve"
+      spec:
+        - question_name: "Target Spoke Cluster Name (Required)"
+          question_description: >-
+            The ManagedCluster name in RHACM, used as the Hub namespace
+            where the ManagedServiceAccount Secret is stored. Use the
+            exact name from oc get managedclusters on the Hub
+            (e.g., spoke-aro-01, spoke-aks-01).
+          variable: target_cluster
+          type: text
+          required: true
+          default: ""
+...

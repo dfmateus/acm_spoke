@@ -1,0 +1,6 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Minimum ansible-core version required by this collection
+requires_ansible: ">=2.18.0"
+...

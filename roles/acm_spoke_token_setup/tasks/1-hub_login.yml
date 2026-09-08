@@ -1,0 +1,60 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SETUP - Hub Login: Authenticates to the ACM Hub and verifies identity.
+# Uses oc login with the Hub ServiceAccount token (with write permission).
+- name: "[SETUP - Hub Login] | Starting authentication"
+  ansible.builtin.debug:
+    msg: "{{ lookup('ansible.builtin.template', 'reports/stage_banner.j2').split('\n') }}"
+  vars:
+    acm_spoke_token_setup_banner_title: "🔐 SETUP - Hub Login (ACM Hub Authentication)"
+    acm_spoke_token_setup_banner_lines:
+      - "📌 Target Cluster: {{ acm_spoke_token_setup_target_cluster }}"
+      - "🌐 Hub URL: {{ acm_spoke_token_setup_hub_url }}"
+
+- name: "[SETUP - Hub Login] | 01.1) Verify required connection variables"
+  ansible.builtin.assert:
+    that:
+      - acm_spoke_token_setup_hub_url | default('') | length > 0
+      - acm_spoke_token_setup_hub_token | default('') | length > 0
+      - acm_spoke_token_setup_target_cluster | default('') | length > 0
+    fail_msg: >-
+      ❌ FAILED! => Required variables missing. Provide:
+      acm_spoke_token_setup_hub_url, acm_spoke_token_setup_hub_token
+      and acm_spoke_token_setup_target_cluster.
+    success_msg: >-
+      ✅ OK! => All required connection variables defined.
+      Hub: {{ acm_spoke_token_setup_hub_url }},
+      Target cluster: {{ acm_spoke_token_setup_target_cluster }}.
+
+# oc login sets the current kubeconfig context to the Hub.
+# The token belongs to an SA with write permission on the Hub to create MSA/ManifestWork.
+- name: "[SETUP - Hub Login] | 01.2) Authenticate to ACM Hub via oc login"
+  ansible.builtin.command: >
+    oc login
+    --token={{ acm_spoke_token_setup_hub_token }}
+    --server={{ acm_spoke_token_setup_hub_url }}
+    {% if not acm_spoke_token_setup_validate_certs | bool %}--insecure-skip-tls-verify{% endif %}
+  register: __acm_hub_login_result
+  changed_when: false
+  failed_when: __acm_hub_login_result.rc != 0
+  no_log: "{{ acm_spoke_token_setup_no_log }}"
+
+- name: "[SETUP - Hub Login] | 01.3) Verify authenticated identity"
+  ansible.builtin.command: oc whoami
+  register: __acm_hub_whoami
+  changed_when: false
+  failed_when: __acm_hub_whoami.rc != 0
+
+- name: "[SETUP - Hub Login] | 01.4) Confirm identity"
+  ansible.builtin.debug:
+    msg: "✅ Authenticated to ACM Hub as: {{ __acm_hub_whoami.stdout }}"
+
+- name: "[SETUP - Hub Login] | Authentication complete"
+  ansible.builtin.debug:
+    msg: "{{ lookup('ansible.builtin.template', 'reports/stage_banner.j2').split('\n') }}"
+  vars:
+    acm_spoke_token_setup_banner_title: "✅ SETUP - Hub Login Completed"
+    acm_spoke_token_setup_banner_lines:
+      - "Authenticated as: {{ __acm_hub_whoami.stdout }}"
+...

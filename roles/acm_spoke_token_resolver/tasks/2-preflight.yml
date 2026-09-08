@@ -1,0 +1,226 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# STAGE 02: Preflight validation of the target managed cluster on the Hub.
+# Runs after Hub login (requires API access) and before reading the MSA Secret.
+# Six checks validate the full chain: cluster exists, is reachable, MSA addon
+# enabled, MSA CR exists, Secret reported by the klusterlet, and RBAC
+# ManifestWork applied. Each check fails with an actionable error message.
+- name: "[STAGE 02 - Preflight] | Starting validation"
+  ansible.builtin.debug:
+    msg: "{{ lookup('ansible.builtin.template', 'reports/stage_banner.j2').split('\n') }}"
+  vars:
+    acm_spoke_token_resolver_banner_title: "🔍 STAGE 02 - Preflight Validation"
+    acm_spoke_token_resolver_banner_lines:
+      - "Target Managed Cluster: '{{ acm_spoke_token_resolver_target_cluster }}'"
+
+# 02.1) ManagedCluster CR must exist on the Hub
+- name: "[STAGE 02 - Preflight] | 02.1) Query ManagedCluster CR"
+  kubernetes.core.k8s_info:
+    api_version: cluster.open-cluster-management.io/v1
+    kind: ManagedCluster
+    name: "{{ acm_spoke_token_resolver_target_cluster }}"
+  register: __acm_preflight_mc
+
+- name: "[STAGE 02 - Preflight] | 02.1) Assert ManagedCluster exists on the Hub"
+  ansible.builtin.assert:
+    that:
+      - __acm_preflight_mc.resources | length > 0
+    fail_msg: >-
+      ❌ FAILED! => ManagedCluster '{{ acm_spoke_token_resolver_target_cluster }}'
+      not found on this Hub. The target_cluster value must match the exact name
+      of a ManagedCluster CR registered on the ACM Hub. List available clusters with:
+      oc get managedclusters --context=<hub-context>
+    success_msg: >-
+      ✅ OK! => ManagedCluster '{{ acm_spoke_token_resolver_target_cluster }}' found on the Hub.
+
+# 02.1b) Auto-detect spoke TLS from the 'vendor' label.
+# OpenShift (ARO, ROSA, OCP) uses public certs -> validate_certs: true.
+# Kubernetes (AKS, EKS, GKE, IKS) uses internal CA -> validate_certs: false.
+# If spoke_validate_certs was already set to true/false, the override is honored.
+- name: "[STAGE 02 - Preflight] | 02.1b) Auto-detect spoke TLS from vendor label"
+  ansible.builtin.set_fact:
+    __acm_spoke_vendor: >-
+      {{ __acm_preflight_mc.resources[0].metadata.labels.vendor | default('Unknown') }}
+    __acm_spoke_tls_resolved: >-
+      {{ (acm_spoke_token_resolver_spoke_validate_certs | string == 'auto')
+         | ternary(
+             __acm_preflight_mc.resources[0].metadata.labels.vendor | default('Unknown') == 'OpenShift',
+             acm_spoke_token_resolver_spoke_validate_certs | bool
+           ) }}
+
+- name: "[STAGE 02 - Preflight] | 02.1b) Export resolved TLS fact for downstream"
+  ansible.builtin.set_fact:
+    acm_spoke_token_resolver_spoke_validate_certs: "{{ __acm_spoke_tls_resolved | bool }}"
+
+- name: "[STAGE 02 - Preflight] | 02.1b) Spoke TLS detection result"
+  ansible.builtin.debug:
+    msg: >-
+      🔎 Spoke vendor='{{ __acm_spoke_vendor }}' →
+      spoke TLS validation={{ __acm_spoke_tls_resolved }}
+      (mode={{ acm_spoke_token_resolver_spoke_validate_certs }})
+
+# 02.2) ManagedCluster must be Available (spoke reachable from the Hub)
+- name: "[STAGE 02 - Preflight] | 02.2) Extract ManagedCluster availability status"
+  ansible.builtin.set_fact:
+    __acm_preflight_mc_available: >-
+      {{ (__acm_preflight_mc.resources[0].status.conditions | default([])
+         | selectattr('type', 'equalto', 'ManagedClusterConditionAvailable')
+         | map(attribute='status') | list | first) | default('Unknown') }}
+
+- name: "[STAGE 02 - Preflight] | 02.2) Assert ManagedCluster is Available"
+  ansible.builtin.assert:
+    that:
+      - __acm_preflight_mc_available | bool
+    fail_msg: >-
+      ❌ FAILED! => ManagedCluster '{{ acm_spoke_token_resolver_target_cluster }}'
+      is not Available (status: {{ __acm_preflight_mc_available }}).
+      The spoke cluster may be unreachable, the klusterlet may be failing,
+      or the cluster may be powered off. Check:
+      oc get managedcluster {{ acm_spoke_token_resolver_target_cluster }}
+      -o jsonpath='{.status.conditions}'
+    success_msg: >-
+      ✅ OK! => ManagedCluster '{{ acm_spoke_token_resolver_target_cluster }}'
+      is Available.
+
+# 02.3) managed-serviceaccount addon must be enabled for the cluster
+- name: "[STAGE 02 - Preflight] | 02.3) Query managed-serviceaccount addon"
+  kubernetes.core.k8s_info:
+    api_version: addon.open-cluster-management.io/v1alpha1
+    kind: ManagedClusterAddOn
+    name: managed-serviceaccount
+    namespace: "{{ acm_spoke_token_resolver_target_cluster }}"
+  register: __acm_preflight_msa_addon
+
+- name: "[STAGE 02 - Preflight] | 02.3) Assert managed-serviceaccount addon is enabled"
+  ansible.builtin.assert:
+    that:
+      - __acm_preflight_msa_addon.resources | length > 0
+    fail_msg: >-
+      ❌ FAILED! => managed-serviceaccount addon is not enabled for
+      cluster '{{ acm_spoke_token_resolver_target_cluster }}'. Without it, ACM cannot
+      provision ServiceAccounts on the spoke. Enable it with:
+      oc apply -f - <<EOF
+      apiVersion: addon.open-cluster-management.io/v1alpha1
+      kind: ManagedClusterAddOn
+      metadata:
+        name: managed-serviceaccount
+        namespace: {{ acm_spoke_token_resolver_target_cluster }}
+      spec:
+        installNamespace: open-cluster-management-agent-addon
+      EOF
+      Or enable it globally via the MultiClusterEngine CR.
+    success_msg: >-
+      ✅ OK! => managed-serviceaccount addon enabled for
+      '{{ acm_spoke_token_resolver_target_cluster }}'.
+
+# 02.4) ManagedServiceAccount CR must exist in the cluster namespace on the Hub
+- name: "[STAGE 02 - Preflight] | 02.4) Query ManagedServiceAccount CR"
+  kubernetes.core.k8s_info:
+    api_version: authentication.open-cluster-management.io/v1beta1
+    kind: ManagedServiceAccount
+    name: "{{ acm_spoke_token_resolver_msa_name }}"
+    namespace: "{{ acm_spoke_token_resolver_target_cluster }}"
+  register: __acm_preflight_msa_cr
+
+- name: "[STAGE 02 - Preflight] | 02.4) Assert ManagedServiceAccount CR exists"
+  ansible.builtin.assert:
+    that:
+      - __acm_preflight_msa_cr.resources | length > 0
+    fail_msg: >-
+      ❌ FAILED! => ManagedServiceAccount '{{ acm_spoke_token_resolver_msa_name }}'
+      not found for spoke '{{ acm_spoke_token_resolver_target_cluster }}'.
+      This spoke has not been provisioned yet. The resolver is read-only and does
+      not create resources. Run the bootstrap_hub_spoke.yml playbook (local) or the
+      equivalent Job Template in AAP to provision. The bootstrap auto-discovers
+      ManagedClusters and provisions only those that are missing.
+    success_msg: >-
+      ✅ OK! => ManagedServiceAccount '{{ acm_spoke_token_resolver_msa_name }}'
+      exists in namespace '{{ acm_spoke_token_resolver_target_cluster }}'.
+
+# 02.5) MSA Secret must exist (klusterlet has reported the token)
+- name: "[STAGE 02 - Preflight] | 02.5) Query MSA Secret on the Hub"
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: "{{ acm_spoke_token_resolver_msa_name }}"
+    namespace: "{{ acm_spoke_token_resolver_target_cluster }}"
+  register: __acm_preflight_msa_secret
+  no_log: "{{ acm_spoke_token_resolver_no_log }}"
+
+- name: "[STAGE 02 - Preflight] | 02.5) Assert MSA Secret exists"
+  ansible.builtin.assert:
+    that:
+      - __acm_preflight_msa_secret.resources | length > 0
+    fail_msg: >-
+      ❌ FAILED! => MSA Secret '{{ acm_spoke_token_resolver_msa_name }}'
+      not found in namespace '{{ acm_spoke_token_resolver_target_cluster }}' on the Hub.
+      The ManagedServiceAccount CR exists, but the klusterlet has not reported the token yet.
+      Possible causes: (1) klusterlet failing on the spoke,
+      (2) network issue between Hub and spoke, (3) the addon just started and needs
+      a few seconds to provision. Check MSA status:
+      oc get managedserviceaccount {{ acm_spoke_token_resolver_msa_name }}
+      -n {{ acm_spoke_token_resolver_target_cluster }} -o yaml
+    success_msg: >-
+      ✅ OK! => MSA Secret '{{ acm_spoke_token_resolver_msa_name }}'
+      found. The klusterlet has reported the spoke token.
+
+# 02.6) RBAC ManifestWork must exist and be Applied on the spoke
+- name: "[STAGE 02 - Preflight] | 02.6) Query RBAC ManifestWork"
+  kubernetes.core.k8s_info:
+    api_version: work.open-cluster-management.io/v1
+    kind: ManifestWork
+    name: "{{ acm_spoke_token_resolver_manifestwork_name }}"
+    namespace: "{{ acm_spoke_token_resolver_target_cluster }}"
+  register: __acm_preflight_manifestwork
+
+- name: "[STAGE 02 - Preflight] | 02.6) Assert RBAC ManifestWork exists"
+  ansible.builtin.assert:
+    that:
+      - __acm_preflight_manifestwork.resources | length > 0
+    fail_msg: >-
+      ❌ FAILED! => ManifestWork '{{ acm_spoke_token_resolver_manifestwork_name }}'
+      not found for spoke '{{ acm_spoke_token_resolver_target_cluster }}'.
+      Without the RBAC ManifestWork, the MSA ServiceAccount on the spoke has no
+      permissions. Run the bootstrap_hub_spoke.yml playbook (local) or the equivalent
+      Job Template in AAP to provision. The bootstrap creates MSA CR +
+      RBAC ManifestWork for unprovisioned spokes.
+    success_msg: >-
+      ✅ OK! => ManifestWork '{{ acm_spoke_token_resolver_manifestwork_name }}'
+      found for '{{ acm_spoke_token_resolver_target_cluster }}'.
+
+# 02.6b) ManifestWork must have Applied status (not just exist on the Hub)
+- name: "[STAGE 02 - Preflight] | 02.6b) Extract Applied condition from ManifestWork"
+  ansible.builtin.set_fact:
+    __acm_preflight_mw_applied: >-
+      {{ __acm_preflight_manifestwork.resources[0].status.conditions
+         | default([])
+         | selectattr('type', 'equalto', 'Applied')
+         | map(attribute='status')
+         | first
+         | default('Unknown') }}
+
+- name: "[STAGE 02 - Preflight] | 02.6b) Assert RBAC ManifestWork is Applied on the spoke"
+  ansible.builtin.assert:
+    that:
+      - __acm_preflight_mw_applied | bool
+    fail_msg: >-
+      ❌ FAILED! => ManifestWork '{{ acm_spoke_token_resolver_manifestwork_name }}'
+      exists but is NOT Applied on spoke
+      '{{ acm_spoke_token_resolver_target_cluster }}'
+      (status: {{ __acm_preflight_mw_applied }}).
+      The klusterlet may be unable to apply the ClusterRoleBinding.
+      Check: oc get manifestwork {{ acm_spoke_token_resolver_manifestwork_name }}
+      -n {{ acm_spoke_token_resolver_target_cluster }} -o jsonpath='{.status.conditions}'
+    success_msg: >-
+      ✅ OK! => RBAC ManifestWork is Applied on spoke
+      '{{ acm_spoke_token_resolver_target_cluster }}'.
+
+- name: "[STAGE 02 - Preflight] | Validation complete"
+  ansible.builtin.debug:
+    msg: "{{ lookup('ansible.builtin.template', 'reports/stage_banner.j2').split('\n') }}"
+  vars:
+    acm_spoke_token_resolver_banner_title: "🔍 STAGE 02 - Preflight Complete"
+    acm_spoke_token_resolver_banner_lines:
+      - "All 6 checks passed for '{{ acm_spoke_token_resolver_target_cluster }}'"
+...

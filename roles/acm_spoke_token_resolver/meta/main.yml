@@ -1,0 +1,32 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+galaxy_info:
+  author: "Diego Felipe Mateus"
+  role_name: "acm_spoke_token_resolver"
+  namespace: "dfmateus"
+  description: >-
+    Resolves temporary tokens for any spoke/managed cluster (OpenShift,
+    AKS, EKS, GKE, IKS, vanilla K8s) registered on an RHACM Hub via the
+    ManagedServiceAccount API. Eliminates static per-cluster credentials
+    in AAP by centralizing authentication through the ACM Hub.
+  license: "GPL-3.0-or-later"
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+    - name: Fedora
+      versions:
+        - all
+  galaxy_tags:
+    - acm
+    - rhacm
+    - openshift
+    - kubernetes
+    - spoke
+    - token
+    - multicluster
+
+dependencies: []
+...

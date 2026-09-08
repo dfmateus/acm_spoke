@@ -1,0 +1,243 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# molecule/default/verify.yml
+# Post-converge assertions: checks that role defaults loaded correctly,
+# rendered templates contain expected markers, and common variable
+# conventions are followed. Runs after converge.yml writes its artifacts
+# to /tmp/.
+
+- name: "Verify role defaults and rendered template output"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    # =================================================================
+    # PHASE 1: RELOAD DEFAULTS AND VERIFY STRUCTURE
+    # Re-load the same defaults as converge.yml so this playbook can
+    # inspect them independently (verify runs in a separate Ansible
+    # invocation, so facts from converge are not carried over).
+    # =================================================================
+    - name: "Load defaults for each role"
+      ansible.builtin.include_vars:
+        dir: "{{ playbook_dir }}/../../roles/{{ item }}/defaults"
+        name: "{{ item }}_defaults"
+      loop:
+        - acm_spoke_hub_rbac_setup
+        - acm_spoke_token_resolver
+        - acm_spoke_token_setup
+      loop_control:
+        label: "{{ item }}"
+
+    # Confirm each role's defaults dict is a non-empty mapping.
+    - name: "Confirm defaults loaded as non-empty dicts"
+      ansible.builtin.assert:
+        that:
+          - lookup('ansible.builtin.vars', item + '_defaults') is mapping
+          - lookup('ansible.builtin.vars', item + '_defaults') | length > 0
+        fail_msg: >-
+          ❌ FAILED! Oh. No! => Defaults for role '{{ item }}' are missing or empty
+        success_msg: >-
+          ✅ PASSED! Oh. Yes! => Defaults for role '{{ item }}' present
+          ({{ lookup('ansible.builtin.vars', item + '_defaults') | length }} keys)
+      loop:
+        - acm_spoke_hub_rbac_setup
+        - acm_spoke_token_resolver
+        - acm_spoke_token_setup
+      loop_control:
+        label: "{{ item }}"
+
+    # =================================================================
+    # PHASE 2: VERIFY COMMON VARIABLE CONVENTIONS
+    # Every role in this project defines separator_char and no_log
+    # in its defaults. This check catches accidental removal of those
+    # required baseline variables.
+    # =================================================================
+    - name: "Verify each role has the separator_char variable"
+      ansible.builtin.assert:
+        that:
+          - >-
+            (item + '_separator_char') in
+            lookup('ansible.builtin.vars', item + '_defaults')
+        fail_msg: >-
+          ❌ FAILED! Oh. No! => Role '{{ item }}' is missing the
+          '{{ item }}_separator_char' variable in defaults/main.yml
+        success_msg: >-
+          ✅ PASSED! Oh. Yes! => Role '{{ item }}' defines separator_char
+      loop:
+        - acm_spoke_hub_rbac_setup
+        - acm_spoke_token_resolver
+        - acm_spoke_token_setup
+      loop_control:
+        label: "{{ item }}"
+
+    - name: "Verify each role has the no_log variable"
+      ansible.builtin.assert:
+        that:
+          - >-
+            (item + '_no_log') in
+            lookup('ansible.builtin.vars', item + '_defaults')
+        fail_msg: >-
+          ❌ FAILED! Oh. No! => Role '{{ item }}' is missing the
+          '{{ item }}_no_log' variable in defaults/main.yml
+        success_msg: >-
+          ✅ PASSED! Oh. Yes! => Role '{{ item }}' defines no_log
+      loop:
+        - acm_spoke_hub_rbac_setup
+        - acm_spoke_token_resolver
+        - acm_spoke_token_setup
+      loop_control:
+        label: "{{ item }}"
+
+    - name: "Verify each role has the default_message_padding variable"
+      ansible.builtin.assert:
+        that:
+          - >-
+            (item + '_default_message_padding') in
+            lookup('ansible.builtin.vars', item + '_defaults')
+        fail_msg: >-
+          ❌ FAILED! Oh. No! => Role '{{ item }}' is missing the
+          '{{ item }}_default_message_padding' variable in defaults/main.yml
+        success_msg: >-
+          ✅ PASSED! Oh. Yes! => Role '{{ item }}' defines default_message_padding
+      loop:
+        - acm_spoke_hub_rbac_setup
+        - acm_spoke_token_resolver
+        - acm_spoke_token_setup
+      loop_control:
+        label: "{{ item }}"
+
+    # =================================================================
+    # PHASE 3: VERIFY ROLE-SPECIFIC REQUIRED VARIABLES EXIST
+    # Each role needs hub_url, hub_token and validate_certs at minimum.
+    # This catches accidental deletion from defaults/main.yml.
+    # =================================================================
+    - name: "Verify Hub connection variables exist in each role's defaults"
+      ansible.builtin.assert:
+        that:
+          - (item.role + '_hub_url') in lookup('ansible.builtin.vars', item.role + '_defaults')
+          - (item.role + '_hub_token') in lookup('ansible.builtin.vars', item.role + '_defaults')
+          - (item.role + '_validate_certs') in lookup('ansible.builtin.vars', item.role + '_defaults')
+        fail_msg: >-
+          ❌ FAILED! Oh. No! => Role '{{ item.role }}' is missing one or more
+          Hub connection variables (hub_url, hub_token, validate_certs)
+        success_msg: >-
+          ✅ PASSED! Oh. Yes! => Role '{{ item.role }}' has all Hub connection variables
+      loop:
+        - role: acm_spoke_hub_rbac_setup
+        - role: acm_spoke_token_resolver
+        - role: acm_spoke_token_setup
+      loop_control:
+        label: "{{ item.role }}"
+
+    # Verify target_cluster exists in the roles that need it
+    # (token_resolver and token_setup, but not hub_rbac_setup).
+    - name: "Verify target_cluster variable exists in spoke-targeting roles"
+      ansible.builtin.assert:
+        that:
+          - (item + '_target_cluster') in lookup('ansible.builtin.vars', item + '_defaults')
+        fail_msg: >-
+          ❌ FAILED! Oh. No! => Role '{{ item }}' is missing the
+          '{{ item }}_target_cluster' variable in defaults/main.yml
+        success_msg: >-
+          ✅ PASSED! Oh. Yes! => Role '{{ item }}' defines target_cluster
+      loop:
+        - acm_spoke_token_resolver
+        - acm_spoke_token_setup
+      loop_control:
+        label: "{{ item }}"
+
+    # Verify MSA-related variables exist in the roles that use them.
+    - name: "Verify MSA variables exist in token_resolver and token_setup"
+      ansible.builtin.assert:
+        that:
+          - (item + '_msa_name') in lookup('ansible.builtin.vars', item + '_defaults')
+          - (item + '_manifestwork_name') in lookup('ansible.builtin.vars', item + '_defaults')
+        fail_msg: >-
+          ❌ FAILED! Oh. No! => Role '{{ item }}' is missing msa_name
+          or manifestwork_name in defaults/main.yml
+        success_msg: >-
+          ✅ PASSED! Oh. Yes! => Role '{{ item }}' defines msa_name and manifestwork_name
+      loop:
+        - acm_spoke_token_resolver
+        - acm_spoke_token_setup
+      loop_control:
+        label: "{{ item }}"
+
+    # =================================================================
+    # PHASE 4: VERIFY RENDERED TEMPLATE OUTPUT
+    # Reads the files converge.yml wrote to /tmp/ and asserts that
+    # expected content markers are present in each one.
+    # =================================================================
+
+    # -- hub_rbac_setup stage_banner --
+    - name: "Read rendered hub_rbac banner from /tmp"
+      ansible.builtin.slurp:
+        src: /tmp/molecule_test_hub_rbac_banner.txt
+      register: rendered_hub_rbac_banner
+
+    - name: "Verify hub_rbac banner contains the expected title"
+      ansible.builtin.assert:
+        that:
+          - "'MOLECULE TEST - HUB RBAC' in (rendered_hub_rbac_banner.content | b64decode)"
+          - "'acm_spoke_hub_rbac_setup' in (rendered_hub_rbac_banner.content | b64decode)"
+        fail_msg: >-
+          ❌ FAILED! Oh. No! => Rendered hub_rbac banner is missing the
+          expected title or role name
+        success_msg: >-
+          ✅ PASSED! Oh. Yes! => Rendered hub_rbac banner contains the expected
+          title and role reference
+
+    # -- token_resolver stage_banner --
+    - name: "Read rendered resolver banner from /tmp"
+      ansible.builtin.slurp:
+        src: /tmp/molecule_test_resolver_banner.txt
+      register: rendered_resolver_banner
+
+    - name: "Verify resolver banner contains the expected title"
+      ansible.builtin.assert:
+        that:
+          - "'MOLECULE TEST - TOKEN RESOLVER' in (rendered_resolver_banner.content | b64decode)"
+          - "'acm_spoke_token_resolver' in (rendered_resolver_banner.content | b64decode)"
+        fail_msg: >-
+          ❌ FAILED! Oh. No! => Rendered resolver banner is missing the
+          expected title or role name
+        success_msg: >-
+          ✅ PASSED! Oh. Yes! => Rendered resolver banner contains the expected
+          title and role reference
+
+    # -- token_setup stage_banner --
+    - name: "Read rendered setup banner from /tmp"
+      ansible.builtin.slurp:
+        src: /tmp/molecule_test_setup_banner.txt
+      register: rendered_setup_banner
+
+    - name: "Verify setup banner contains the expected title"
+      ansible.builtin.assert:
+        that:
+          - "'MOLECULE TEST - TOKEN SETUP' in (rendered_setup_banner.content | b64decode)"
+          - "'acm_spoke_token_setup' in (rendered_setup_banner.content | b64decode)"
+        fail_msg: >-
+          ❌ FAILED! Oh. No! => Rendered setup banner is missing the
+          expected title or role name
+        success_msg: >-
+          ✅ PASSED! Oh. Yes! => Rendered setup banner contains the expected
+          title and role reference
+
+    # =================================================================
+    # PHASE 5: CLEANUP TEST ARTIFACTS
+    # Remove the rendered files from /tmp to avoid leaving test debris
+    # on the host.
+    # =================================================================
+    - name: "Clean up rendered test artifacts from /tmp"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/molecule_test_hub_rbac_banner.txt
+        - /tmp/molecule_test_resolver_banner.txt
+        - /tmp/molecule_test_setup_banner.txt
+      loop_control:
+        label: "{{ item | basename }}"
+...

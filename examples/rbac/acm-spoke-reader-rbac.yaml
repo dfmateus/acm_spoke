@@ -1,0 +1,75 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# acm-spoke-reader: Read-only ServiceAccount for the acm_spoke_token_resolver role.
+# Can read exactly 5 resource types on the Hub. No cluster-admin required.
+#
+# Apply once on the Hub:
+#   oc apply -f examples/rbac/acm-spoke-reader-rbac.yaml --context <hub-context>
+#
+# Generate a long-lived token (after applying):
+#   oc get secret acm-spoke-reader-token -n open-cluster-management \
+#     --context <hub-context> -o jsonpath='{.data.token}' | base64 -d && echo
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: acm-spoke-reader
+  namespace: open-cluster-management
+...
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: acm-spoke-reader
+rules:
+  # ManagedCluster: spoke API URL and Available status.
+  - apiGroups: ["cluster.open-cluster-management.io"]
+    resources: ["managedclusters"]
+    verbs: ["get", "list"]
+
+  # ManagedClusterAddOn: verify whether the MSA addon is active.
+  - apiGroups: ["addon.open-cluster-management.io"]
+    resources: ["managedclusteraddons"]
+    verbs: ["get"]
+
+  # ManagedServiceAccount: verify whether the MSA CR exists.
+  - apiGroups: ["authentication.open-cluster-management.io"]
+    resources: ["managedserviceaccounts"]
+    verbs: ["get"]
+
+  # ManifestWork: verify whether the spoke RBAC is applied.
+  - apiGroups: ["work.open-cluster-management.io"]
+    resources: ["manifestworks"]
+    verbs: ["get"]
+
+  # Secret: read the MSA token. Scoped by resourceNames to the MSA Secret only.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["acm-spoke-automation"]
+    verbs: ["get"]
+...
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: acm-spoke-reader
+subjects:
+  - kind: ServiceAccount
+    name: acm-spoke-reader
+    namespace: open-cluster-management
+roleRef:
+  kind: ClusterRole
+  name: acm-spoke-reader
+  apiGroup: rbac.authorization.k8s.io
+...
+---
+# Long-lived token (Kubernetes 1.24+)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: acm-spoke-reader-token
+  namespace: open-cluster-management
+  annotations:
+    kubernetes.io/service-account.name: acm-spoke-reader
+type: kubernetes.io/service-account-token
+...

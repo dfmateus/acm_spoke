@@ -1,0 +1,30 @@
+{# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com> #}
+{# SPDX-License-Identifier: GPL-3.0-or-later #}
+======================================================================
+ ✅ SPOKE CLUSTER SETUP COMPLETED
+======================================================================
+
+ [PROVISIONED RESOURCES]
+   * Target Cluster:     {{ acm_spoke_token_setup_target_cluster }}
+   * MSA CR:             {{ acm_spoke_token_setup_msa_name }} (namespace: {{ acm_spoke_token_setup_target_cluster }})
+   * ManifestWork:       {{ acm_spoke_token_setup_manifestwork_name }} (namespace: {{ acm_spoke_token_setup_target_cluster }})
+   * Spoke ClusterRole:  {{ acm_spoke_token_setup_spoke_cluster_role }}
+   * Token Validity:     {{ acm_spoke_token_setup_msa_validity }}
+
+ [SETUP STEPS]
+   * S.1) ManagedCluster verified          ✅
+   * S.2) MSA addon enabled                ✅
+   * S.3) ManagedServiceAccount created    ✅
+   * S.4) ManifestWork RBAC deployed       ✅
+   * S.5) Klusterlet Secret ready          ✅
+
+ [HUB DETAILS]
+   * Hub URL:            {{ acm_spoke_token_setup_hub_url }}
+   * TLS Validation:     {{ acm_spoke_token_setup_validate_certs | ternary('enabled', 'disabled') }}
+
+ [NEXT STEP]
+   * Run the resolver role to obtain the spoke token:
+     ansible-playbook playbooks/resolve_spoke_access.yml \
+       -e @.local/hub_vars_readonly.yml \
+       -e target_cluster={{ acm_spoke_token_setup_target_cluster }}
+======================================================================

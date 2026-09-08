@@ -1,0 +1,103 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# molecule/default/converge.yml
+# Offline validation of role defaults for all 3 roles in this collection.
+# Does not contact any Kubernetes cluster. All assertions run against
+# local YAML files loaded via include_vars.
+#
+# What this playbook tests:
+#   Phase 1 - Loads defaults/main.yml for all 3 roles and confirms
+#             the YAML parses without error.
+#   Phase 2 - Renders stage_banner.j2 templates from each role with
+#             mock data to catch Jinja2 syntax errors.
+
+- name: "Validate role defaults and template rendering (offline)"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    # =================================================================
+    # PHASE 1: LOAD ROLE DEFAULTS
+    # Each include_vars stores the result under a role-scoped dict name
+    # to avoid variable collisions across the 3 roles.
+    # =================================================================
+    - name: "Load defaults for each role"
+      ansible.builtin.include_vars:
+        dir: "{{ playbook_dir }}/../../roles/{{ item }}/defaults"
+        name: "{{ item }}_defaults"
+      loop:
+        - acm_spoke_hub_rbac_setup
+        - acm_spoke_token_resolver
+        - acm_spoke_token_setup
+      loop_control:
+        label: "{{ item }}"
+
+    - name: "Confirm all role defaults loaded successfully"
+      ansible.builtin.assert:
+        that:
+          - lookup('ansible.builtin.vars', item + '_defaults') is mapping
+          - lookup('ansible.builtin.vars', item + '_defaults') | length > 0
+        fail_msg: >-
+          ❌ FAILED! Oh. No! => Defaults for role '{{ item }}' failed to load
+          or returned an empty dict
+        success_msg: >-
+          ✅ PASSED! Oh. Yes! => Defaults for role '{{ item }}' loaded
+          ({{ lookup('ansible.builtin.vars', item + '_defaults') | length }} variables)
+      loop:
+        - acm_spoke_hub_rbac_setup
+        - acm_spoke_token_resolver
+        - acm_spoke_token_setup
+      loop_control:
+        label: "{{ item }}"
+
+    # =================================================================
+    # PHASE 2: RENDER TEMPLATES WITH MOCK DATA
+    # Each role has a stage_banner.j2 template for formatted console
+    # output. We render each one with mock banner data to confirm the
+    # Jinja2 syntax is valid and the separator logic works.
+    # =================================================================
+
+    # -- acm_spoke_hub_rbac_setup stage_banner --
+    - name: "Render stage_banner.j2 for acm_spoke_hub_rbac_setup"
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/acm_spoke_hub_rbac_setup/templates/reports/stage_banner.j2"
+        dest: /tmp/molecule_test_hub_rbac_banner.txt
+        mode: "0644"
+      vars:
+        acm_spoke_hub_rbac_setup_separator_char: "*"
+        acm_spoke_hub_rbac_setup_default_message_padding: 4
+        acm_spoke_hub_rbac_setup_banner_title: "MOLECULE TEST - HUB RBAC"
+        acm_spoke_hub_rbac_setup_banner_lines:
+          - "Role: acm_spoke_hub_rbac_setup"
+          - "Context: molecule-test-context"
+
+    # -- acm_spoke_token_resolver stage_banner --
+    - name: "Render stage_banner.j2 for acm_spoke_token_resolver"
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/acm_spoke_token_resolver/templates/reports/stage_banner.j2"
+        dest: /tmp/molecule_test_resolver_banner.txt
+        mode: "0644"
+      vars:
+        acm_spoke_token_resolver_separator_char: "*"
+        acm_spoke_token_resolver_default_message_padding: 4
+        acm_spoke_token_resolver_banner_title: "MOLECULE TEST - TOKEN RESOLVER"
+        acm_spoke_token_resolver_banner_lines:
+          - "Role: acm_spoke_token_resolver"
+          - "Context: molecule-test-context"
+
+    # -- acm_spoke_token_setup stage_banner --
+    - name: "Render stage_banner.j2 for acm_spoke_token_setup"
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/acm_spoke_token_setup/templates/reports/stage_banner.j2"
+        dest: /tmp/molecule_test_setup_banner.txt
+        mode: "0644"
+      vars:
+        acm_spoke_token_setup_separator_char: "*"
+        acm_spoke_token_setup_default_message_padding: 4
+        acm_spoke_token_setup_banner_title: "MOLECULE TEST - TOKEN SETUP"
+        acm_spoke_token_setup_banner_lines:
+          - "Role: acm_spoke_token_setup"
+          - "Context: molecule-test-context"
+...

@@ -1,0 +1,35 @@
+---
+# .ansible-lint (repository root)
+#
+# This config is picked up when running `ansible-lint roles/<name>` from the
+# repo root. Each role also carries its own identical copy under roles/<name>/
+# for IDE integrations and per-role CI runs.
+
+profile: production
+
+exclude_paths:
+  - .github/
+  - changelogs/
+  - .ansible/
+  - tests/
+  - ignore_*
+  - ignore_*/
+
+use_default_rules: true
+
+skip_list:
+  - role-name[path]
+
+enable_list:
+  - args
+  - empty-string-compare
+  - no-log-password
+  - no-same-owner
+  - galaxy-version-incorrect
+  - yaml
+
+warn_list:
+  - experimental
+
+offline: true
+...

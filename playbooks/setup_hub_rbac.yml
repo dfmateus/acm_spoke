@@ -1,0 +1,28 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Initial Hub setup: creates SAs and RBAC for the spoke roles.
+# Runs ONCE per Hub with cluster-admin credentials.
+# Idempotent: safe to re-run -- existing resources are not recreated.
+#
+# Usage:
+#   ansible-playbook playbooks/setup_hub_rbac.yml \
+#     -e @.local/hub_vars_cluster_admin.yml
+#
+# Prerequisites:
+#   cluster-admin token on the Hub (kubeadmin or equivalent SA).
+#   RHACM must be installed on the Hub.
+#
+# After execution:
+#   The tokens of the created SAs are displayed in the final banner.
+#   Copy them to .local/hub_vars_admin.yml and .local/hub_vars_readonly.yml.
+- name: "Provision ServiceAccounts and RBAC on the ACM Hub"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: "[HUB RBAC] | Provision SAs and RBAC"
+      ansible.builtin.include_role:
+        name: dfmateus.acm_spoke.acm_spoke_hub_rbac_setup
+...

@@ -1,0 +1,32 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+galaxy_info:
+  author: "Diego Felipe Mateus"
+  role_name: "acm_spoke_token_setup"
+  namespace: "dfmateus"
+  description: >-
+    Provisions ManagedServiceAccount + ManifestWork RBAC on the ACM Hub for
+    spoke/managed clusters. Enables temporary token resolution by the
+    acm_spoke_token_resolver role. Works with OpenShift, AKS, EKS, GKE,
+    IKS, ROSA, ARO and vanilla Kubernetes.
+  license: "GPL-3.0-or-later"
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+    - name: Fedora
+      versions:
+        - all
+  galaxy_tags:
+    - acm
+    - rhacm
+    - openshift
+    - kubernetes
+    - spoke
+    - msa
+    - rbac
+
+dependencies: []
+...

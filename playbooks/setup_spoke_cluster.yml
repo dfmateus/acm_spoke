@@ -1,0 +1,58 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Spoke cluster setup for token resolution.
+# Creates the ManagedServiceAccount CR, ManifestWork RBAC, and waits for the
+# klusterlet to report the token. Idempotent: safe to re-run.
+#
+# Usage (single cluster):
+#   ansible-playbook playbooks/setup_spoke_cluster.yml \
+#     -e @.local/hub_vars_admin.yml \
+#     -e target_cluster=my-spoke-cluster
+#
+# Usage (multiple clusters at once):
+#   ansible-playbook playbooks/setup_spoke_cluster.yml \
+#     -e @.local/hub_vars_admin.yml \
+#     -e '{"target_clusters": ["cluster-01", "cluster-02", "cluster-03"]}'
+#
+# Prerequisites:
+#   The Hub SA must have write permission (create MSA, ManifestWork).
+#   The read-only SA used for token resolution is NOT sufficient for setup.
+- name: "Provision spoke cluster(s) for token resolution via ACM"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: "[SETUP] | Validate that a target cluster was provided"
+      ansible.builtin.assert:
+        that:
+          - (target_cluster | default('') | length > 0) or (target_clusters | default([]) | length > 0)
+        fail_msg: >-
+          ❌ FAILED! => No target cluster specified. Provide either
+          'target_cluster' (single) or 'target_clusters' (list) as extra vars.
+        success_msg: >-
+          ✅ OK! => Target cluster variable provided.
+
+    # Single cluster setup (target_cluster variable)
+    - name: "[SETUP] | Provision single cluster"
+      when: target_cluster | default('') | length > 0
+      ansible.builtin.include_role:
+        name: dfmateus.acm_spoke.acm_spoke_token_setup
+      vars:
+        acm_spoke_token_setup_target_cluster: "{{ target_cluster }}"
+
+    # Multiple cluster setup (target_clusters list)
+    - name: "[SETUP] | Provision multiple clusters"
+      when:
+        - target_clusters | default([]) | length > 0
+        - target_cluster | default('') | length == 0
+      ansible.builtin.include_role:
+        name: dfmateus.acm_spoke.acm_spoke_token_setup
+      loop: "{{ target_clusters }}"
+      loop_control:
+        loop_var: __setup_cluster_name
+        label: "{{ __setup_cluster_name }}"
+      vars:
+        acm_spoke_token_setup_target_cluster: "{{ __setup_cluster_name }}"
+...

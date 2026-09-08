@@ -1,0 +1,127 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+argument_specs:
+  main:
+    short_description: >-
+      Provision ManagedServiceAccount and ManifestWork RBAC on the ACM Hub
+      for a spoke cluster.
+    description:
+      - >-
+        Creates a ManagedServiceAccount (MSA) and a ManifestWork that deploys
+        a ClusterRoleBinding on the target spoke cluster, granting the MSA
+        ServiceAccount the specified ClusterRole. After setup, the
+        acm_spoke_token_resolver role can resolve temporary bearer tokens
+        for the provisioned spoke.
+      - >-
+        Works with any Kubernetes distribution managed by ACM: OpenShift,
+        AKS, EKS, GKE, IKS, ROSA, ARO, or vanilla K8s, as long as the
+        cluster is imported as a ManagedCluster on the Hub with the
+        klusterlet running.
+      - >-
+        The Hub SA token must have write permissions (create/update on MSA,
+        ManifestWork, and ManagedClusterAddOn). The read-only SA used for
+        token resolution is not sufficient for setup.
+    options:
+      acm_spoke_token_setup_hub_url:
+        type: str
+        required: true
+        description: >-
+          API URL of the ACM Hub (e.g., https://api.hub.example.com:6443).
+          In AAP, inject via a custom credential type.
+
+      acm_spoke_token_setup_hub_token:
+        type: str
+        required: true
+        no_log: true
+        description: >-
+          Bearer token for authentication on the Hub. Must belong to a
+          ServiceAccount with write RBAC (create/update on MSA,
+          ManifestWork, ManagedClusterAddOn).
+
+      acm_spoke_token_setup_validate_certs:
+        type: bool
+        required: false
+        default: true
+        description: >-
+          Validate TLS certificates when connecting to the Hub API.
+
+      acm_spoke_token_setup_target_cluster:
+        type: str
+        required: true
+        description: >-
+          Name of the ManagedCluster on the Hub (OpenShift, AKS, EKS,
+          GKE, IKS, etc.). Corresponds to the namespace on the Hub
+          where the MSA CR and ManifestWork are created.
+
+      acm_spoke_token_setup_msa_name:
+        type: str
+        required: false
+        default: "acm-spoke-automation"
+        description: >-
+          Name of the ManagedServiceAccount CR on the Hub. All spokes
+          use the same MSA name; the namespace (target_cluster)
+          differentiates them. Must match
+          acm_spoke_token_resolver_msa_name for the resolver to find
+          the resources created by setup.
+
+      acm_spoke_token_setup_manifestwork_name:
+        type: str
+        required: false
+        default: "acm-spoke-automation-rbac"
+        description: >-
+          Name of the ManifestWork CR that deploys a
+          ClusterRoleBinding on the spoke cluster.
+
+      acm_spoke_token_setup_spoke_cluster_role:
+        type: str
+        required: false
+        default: "cluster-admin"
+        description: >-
+          ClusterRole to bind to the MSA ServiceAccount on the spoke.
+          Defaults to cluster-admin for broad compatibility. Override
+          for least-privilege if downstream automation needs fewer
+          permissions.
+
+      acm_spoke_token_setup_msa_validity:
+        type: str
+        required: false
+        default: "720h"
+        description: >-
+          Validity period for the MSA token. The klusterlet renews the
+          token automatically before expiration. Shorter values reduce
+          the blast radius if the Hub Secret is compromised; longer
+          values reduce API churn. Default is 720h (30 days).
+
+      acm_spoke_token_setup_no_log:
+        type: bool
+        required: false
+        default: true
+        description: >-
+          Mask sensitive data (tokens, secrets) in the job output.
+          Defaults to the value of var_no_log if defined, otherwise
+          true. Set to false only for Hub login troubleshooting.
+
+      acm_spoke_token_setup_separator_char:
+        type: str
+        required: false
+        default: "*"
+        description: >-
+          Character used in visual separator blocks in log output.
+
+      acm_spoke_token_setup_default_message_padding:
+        type: int
+        required: false
+        default: 4
+        description: >-
+          Padding added to visual separator blocks for readability.
+
+      var_no_log:
+        type: bool
+        required: false
+        default: true
+        description: >-
+          Convenience variable that sets the no_log default for all
+          roles in a single place. Each role's no_log variable falls
+          back to this value when defined.
+...

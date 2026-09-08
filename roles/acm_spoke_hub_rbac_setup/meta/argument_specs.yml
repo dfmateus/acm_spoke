@@ -1,0 +1,140 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+argument_specs:
+  main:
+    short_description: >-
+      Provision ServiceAccounts and RBAC on the ACM Hub for spoke automation.
+    description:
+      - >-
+        Creates two ServiceAccounts on the ACM Hub with least-privilege
+        permissions required by the acm_spoke_token_setup (write) and
+        acm_spoke_token_resolver (read-only) roles. The provisioner SA can
+        create MSA, ManifestWork, and enable addons. The reader SA can only
+        read MSA Secrets and validate preflight checks.
+      - >-
+        The token provided in acm_spoke_hub_rbac_setup_hub_token must belong
+        to a user or SA with the cluster-admin role on the Hub. This role
+        runs once per Hub to create the credential infrastructure.
+    options:
+      acm_spoke_hub_rbac_setup_hub_url:
+        type: str
+        required: true
+        description: >-
+          API URL of the ACM Hub (e.g., https://api.hub.example.com:6443).
+
+      acm_spoke_hub_rbac_setup_hub_token:
+        type: str
+        required: true
+        no_log: true
+        description: >-
+          Bearer token for a user with cluster-admin on the Hub.
+          Can be kubeadmin, an existing SA with cluster-admin, or any
+          identity with permission to create SA, ClusterRole, and
+          ClusterRoleBinding.
+
+      acm_spoke_hub_rbac_setup_validate_certs:
+        type: bool
+        required: false
+        default: true
+        description: >-
+          Validate TLS certificates when connecting to the Hub API.
+
+      acm_spoke_hub_rbac_setup_namespace:
+        type: str
+        required: false
+        default: "open-cluster-management"
+        description: >-
+          Namespace where the ServiceAccounts are created. Must be the
+          main ACM Hub namespace where the MCE/ACM CRDs are installed.
+
+      acm_spoke_hub_rbac_setup_provisioner_sa_name:
+        type: str
+        required: false
+        default: "acm-spoke-provisioner"
+        description: >-
+          Name of the write ServiceAccount used by the
+          acm_spoke_token_setup role.
+
+      acm_spoke_hub_rbac_setup_provisioner_clusterrole_name:
+        type: str
+        required: false
+        default: "acm-spoke-provisioner"
+        description: >-
+          Name of the ClusterRole granting write permissions
+          (create/update on MSA, ManifestWork, ManagedClusterAddOn).
+
+      acm_spoke_hub_rbac_setup_provisioner_token_secret_name:
+        type: str
+        required: false
+        default: "acm-spoke-provisioner-token"
+        description: >-
+          Name of the long-lived token Secret for the provisioner
+          ServiceAccount.
+
+      acm_spoke_hub_rbac_setup_reader_sa_name:
+        type: str
+        required: false
+        default: "acm-spoke-reader"
+        description: >-
+          Name of the read-only ServiceAccount used by the
+          acm_spoke_token_resolver role.
+
+      acm_spoke_hub_rbac_setup_reader_clusterrole_name:
+        type: str
+        required: false
+        default: "acm-spoke-reader"
+        description: >-
+          Name of the ClusterRole granting read-only permissions
+          (get/list on ManagedCluster, ManagedClusterAddOn,
+          ManagedServiceAccount, Secret, ManifestWork).
+
+      acm_spoke_hub_rbac_setup_reader_token_secret_name:
+        type: str
+        required: false
+        default: "acm-spoke-reader-token"
+        description: >-
+          Name of the long-lived token Secret for the reader
+          ServiceAccount.
+
+      acm_spoke_hub_rbac_setup_msa_secret_name:
+        type: str
+        required: false
+        default: "acm-spoke-automation"
+        description: >-
+          Name of the MSA Secret that the reader SA is granted
+          permission to read. Must match the msa_name used by
+          acm_spoke_token_resolver and acm_spoke_token_setup.
+
+      acm_spoke_hub_rbac_setup_no_log:
+        type: bool
+        required: false
+        default: true
+        description: >-
+          Mask sensitive data (tokens) in the job output. Defaults to
+          the value of var_no_log if defined, otherwise true. Set to
+          false only for Hub login troubleshooting.
+
+      acm_spoke_hub_rbac_setup_separator_char:
+        type: str
+        required: false
+        default: "*"
+        description: >-
+          Character used in visual separator blocks in log output.
+
+      acm_spoke_hub_rbac_setup_default_message_padding:
+        type: int
+        required: false
+        default: 4
+        description: >-
+          Padding added to visual separator blocks for readability.
+
+      var_no_log:
+        type: bool
+        required: false
+        default: true
+        description: >-
+          Convenience variable that sets the no_log default for all
+          roles in a single place. Each role's no_log variable falls
+          back to this value when defined.
+...

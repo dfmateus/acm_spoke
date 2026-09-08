@@ -1,0 +1,55 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Credential Type: ACM Spoke Setup - Hub
+#
+# Used by the Setup JT. Injects the acm-spoke-provisioner token, which has
+# write access to create MSA CRs, ManifestWorks, and ManagedClusterAddOns
+# on the Hub.
+#
+# Import via infra.controller_configuration or create manually in AAP UI
+# under Administration > Credential Types.
+#
+# Related SA manifest: examples/rbac/acm-spoke-provisioner-rbac.yaml
+# Related JT: examples/aap/job_templates/setup.yml
+
+controller_credential_types:
+  - name: "ACM Spoke Setup - Hub"
+    description: >-
+      Injects Hub connection variables for the setup playbook
+      (setup_spoke_cluster.yml). Uses the acm-spoke-provisioner ServiceAccount
+      with write access for creating MSA CRs, ManifestWorks, and
+      ManagedClusterAddOns on the Hub. Use for onboarding individual spoke
+      clusters without re-running the full bootstrap.
+    kind: cloud
+    inputs:
+      fields:
+        - id: hub_url
+          type: string
+          label: "ACM Hub API URL (Required)"
+          help_text: >-
+            Full URL of the ACM Hub API endpoint
+            (e.g., https://api.hub.example.com:6443).
+        - id: hub_token
+          type: string
+          label: "Hub Bearer Token (Required)"
+          secret: true
+          help_text: >-
+            Token of the acm-spoke-provisioner ServiceAccount. Write access
+            for creating MSA, ManifestWork, and Addon on the Hub. See
+            examples/rbac/acm-spoke-provisioner-rbac.yaml for the SA manifest.
+        - id: validate_certs
+          type: boolean
+          label: "Validate Hub TLS Certificate (Optional)"
+          help_text: >-
+            Verify the Hub API server TLS certificate chain. Uncheck only
+            in lab environments with self-signed certificates.
+      required:
+        - hub_url
+        - hub_token
+    injectors:
+      extra_vars:
+        acm_spoke_token_setup_hub_url: "{{ hub_url }}"
+        acm_spoke_token_setup_hub_token: "{{ hub_token }}"
+        acm_spoke_token_setup_validate_certs: "{{ validate_certs | default(true) }}"
+...

@@ -1,0 +1,361 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Entry point: provisions ServiceAccounts and RBAC on the ACM Hub for the
+# acm_spoke_token_setup (write) and acm_spoke_token_resolver (read-only) roles.
+#
+# Creates two SAs with least-privilege permissions and long-lived tokens.
+# Idempotent: safe to re-run — existing resources are not modified
+# and the final banner reports they already exist.
+#
+# Prerequisite: the token in acm_spoke_hub_rbac_setup_hub_token must
+# belong to a user with cluster-admin on the Hub.
+- name: "[HUB RBAC] | Provision SAs and RBAC on ACM Hub"
+  block:
+    - name: "[HUB RBAC - Hub Login] | Authenticate to ACM Hub"
+      ansible.builtin.include_tasks: 1-hub_login.yml
+
+    # --- Validation: ACM installed ---
+
+    - name: "[HUB RBAC] | Starting provisioning"
+      ansible.builtin.debug:
+        msg: "{{ lookup('ansible.builtin.template', 'reports/stage_banner.j2').split('\n') }}"
+      vars:
+        acm_spoke_hub_rbac_setup_banner_title: "⚙️ HUB RBAC - Provisioning ServiceAccounts"
+        acm_spoke_hub_rbac_setup_banner_lines:
+          - "📌 Namespace: {{ acm_spoke_hub_rbac_setup_namespace }}"
+          - "🔑 Provisioner SA: {{ acm_spoke_hub_rbac_setup_provisioner_sa_name }}"
+          - "🔍 Reader SA: {{ acm_spoke_hub_rbac_setup_reader_sa_name }}"
+
+    # Verify the ACM namespace exists before creating anything.
+    # If it does not exist, ACM is not installed.
+    - name: "[HUB RBAC] | R.1) Verify ACM namespace exists"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Namespace
+        name: "{{ acm_spoke_hub_rbac_setup_namespace }}"
+      register: __hub_rbac_ns_check
+
+    - name: "[HUB RBAC] | R.1) Assert ACM namespace exists"
+      ansible.builtin.assert:
+        that:
+          - __hub_rbac_ns_check.resources | length > 0
+        fail_msg: >-
+          ❌ FAILED! => Namespace '{{ acm_spoke_hub_rbac_setup_namespace }}'
+          not found. RHACM (Red Hat Advanced Cluster Management) must be
+          installed on the Hub before running this role. Verify that the
+          multiclusterhub operator is installed and active.
+        success_msg: >-
+          ✅ OK! => Namespace '{{ acm_spoke_hub_rbac_setup_namespace }}' found.
+
+    # --- Provisioner SA (write) ---
+
+    - name: "[HUB RBAC] | R.2) Create provisioner ServiceAccount"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: "{{ acm_spoke_hub_rbac_setup_provisioner_sa_name }}"
+            namespace: "{{ acm_spoke_hub_rbac_setup_namespace }}"
+      register: __hub_rbac_provisioner_sa_result
+
+    - name: "[HUB RBAC] | R.2) Provisioner SA status"
+      ansible.builtin.debug:
+        msg: >-
+          {{ (__hub_rbac_provisioner_sa_result.changed)
+             | ternary('✅ SA created: ' ~ acm_spoke_hub_rbac_setup_provisioner_sa_name,
+                       '✅ SA already exists: ' ~ acm_spoke_hub_rbac_setup_provisioner_sa_name) }}
+
+    - name: "[HUB RBAC] | R.3) Create provisioner ClusterRole"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: "{{ acm_spoke_hub_rbac_setup_provisioner_clusterrole_name }}"
+          rules:
+            # ManagedCluster: verify cluster exists before provisioning.
+            - apiGroups: ["cluster.open-cluster-management.io"]
+              resources: ["managedclusters"]
+              verbs: ["get"]
+            # ManagedClusterAddOn: enable the managed-serviceaccount addon.
+            - apiGroups: ["addon.open-cluster-management.io"]
+              resources: ["managedclusteraddons"]
+              verbs: ["get", "create", "update", "patch"]
+            # ManagedServiceAccount: create and update MSA CRs.
+            - apiGroups: ["authentication.open-cluster-management.io"]
+              resources: ["managedserviceaccounts"]
+              verbs: ["get", "create", "update", "patch"]
+            # ManifestWork: deploy RBAC (ClusterRoleBinding) to spokes.
+            - apiGroups: ["work.open-cluster-management.io"]
+              resources: ["manifestworks"]
+              verbs: ["get", "create", "update", "patch"]
+            # Secret: check whether the klusterlet reported the MSA token.
+            # Scoped to the MSA Secret name only (same as the reader).
+            - apiGroups: [""]
+              resources: ["secrets"]
+              resourceNames: ["{{ acm_spoke_hub_rbac_setup_msa_secret_name }}"]
+              verbs: ["get"]
+      register: __hub_rbac_provisioner_cr_result
+
+    - name: "[HUB RBAC] | R.3) Provisioner ClusterRole status"
+      ansible.builtin.debug:
+        msg: >-
+          {{ (__hub_rbac_provisioner_cr_result.changed)
+             | ternary('✅ ClusterRole created: ' ~ acm_spoke_hub_rbac_setup_provisioner_clusterrole_name,
+                       '✅ ClusterRole already exists: ' ~ acm_spoke_hub_rbac_setup_provisioner_clusterrole_name) }}
+
+    - name: "[HUB RBAC] | R.4) Create provisioner ClusterRoleBinding"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: "{{ acm_spoke_hub_rbac_setup_provisioner_clusterrole_name }}"
+          subjects:
+            - kind: ServiceAccount
+              name: "{{ acm_spoke_hub_rbac_setup_provisioner_sa_name }}"
+              namespace: "{{ acm_spoke_hub_rbac_setup_namespace }}"
+          roleRef:
+            kind: ClusterRole
+            name: "{{ acm_spoke_hub_rbac_setup_provisioner_clusterrole_name }}"
+            apiGroup: rbac.authorization.k8s.io
+      register: __hub_rbac_provisioner_crb_result
+
+    - name: "[HUB RBAC] | R.4) Provisioner ClusterRoleBinding status"
+      ansible.builtin.debug:
+        msg: >-
+          {{ (__hub_rbac_provisioner_crb_result.changed)
+             | ternary('✅ ClusterRoleBinding created: ' ~ acm_spoke_hub_rbac_setup_provisioner_clusterrole_name,
+                       '✅ ClusterRoleBinding already exists: ' ~ acm_spoke_hub_rbac_setup_provisioner_clusterrole_name) }}
+
+    # Long-lived token Secret (kubernetes.io/service-account-token).
+    # In K8s 1.24+, automatic tokens are no longer created. A Secret with
+    # the service-account.name annotation generates a static token bound to the SA.
+    - name: "[HUB RBAC] | R.5) Create provisioner token Secret"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: "{{ acm_spoke_hub_rbac_setup_provisioner_token_secret_name }}"
+            namespace: "{{ acm_spoke_hub_rbac_setup_namespace }}"
+            annotations:
+              kubernetes.io/service-account.name: "{{ acm_spoke_hub_rbac_setup_provisioner_sa_name }}"
+          type: kubernetes.io/service-account-token
+      register: __hub_rbac_provisioner_secret_result
+
+    - name: "[HUB RBAC] | R.5) Provisioner token Secret status"
+      ansible.builtin.debug:
+        msg: >-
+          {{ (__hub_rbac_provisioner_secret_result.changed)
+             | ternary('✅ Token Secret created: ' ~ acm_spoke_hub_rbac_setup_provisioner_token_secret_name,
+                       '✅ Token Secret already exists: ' ~ acm_spoke_hub_rbac_setup_provisioner_token_secret_name) }}
+
+    # --- Reader SA (read-only) ---
+
+    - name: "[HUB RBAC] | R.6) Create reader ServiceAccount"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: "{{ acm_spoke_hub_rbac_setup_reader_sa_name }}"
+            namespace: "{{ acm_spoke_hub_rbac_setup_namespace }}"
+      register: __hub_rbac_reader_sa_result
+
+    - name: "[HUB RBAC] | R.6) Reader SA status"
+      ansible.builtin.debug:
+        msg: >-
+          {{ (__hub_rbac_reader_sa_result.changed)
+             | ternary('✅ SA created: ' ~ acm_spoke_hub_rbac_setup_reader_sa_name,
+                       '✅ SA already exists: ' ~ acm_spoke_hub_rbac_setup_reader_sa_name) }}
+
+    - name: "[HUB RBAC] | R.7) Create reader ClusterRole"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: "{{ acm_spoke_hub_rbac_setup_reader_clusterrole_name }}"
+          rules:
+            # ManagedCluster: spoke API URL and Available status.
+            - apiGroups: ["cluster.open-cluster-management.io"]
+              resources: ["managedclusters"]
+              verbs: ["get", "list"]
+            # ManagedClusterAddOn: verify the MSA addon is active.
+            - apiGroups: ["addon.open-cluster-management.io"]
+              resources: ["managedclusteraddons"]
+              verbs: ["get"]
+            # ManagedServiceAccount: verify the MSA CR exists.
+            - apiGroups: ["authentication.open-cluster-management.io"]
+              resources: ["managedserviceaccounts"]
+              verbs: ["get"]
+            # ManifestWork: verify spoke RBAC is applied.
+            - apiGroups: ["work.open-cluster-management.io"]
+              resources: ["manifestworks"]
+              verbs: ["get"]
+            # Secret: read the MSA token. Scoped by resourceNames.
+            - apiGroups: [""]
+              resources: ["secrets"]
+              resourceNames: ["{{ acm_spoke_hub_rbac_setup_msa_secret_name }}"]
+              verbs: ["get"]
+      register: __hub_rbac_reader_cr_result
+
+    - name: "[HUB RBAC] | R.7) Reader ClusterRole status"
+      ansible.builtin.debug:
+        msg: >-
+          {{ (__hub_rbac_reader_cr_result.changed)
+             | ternary('✅ ClusterRole created: ' ~ acm_spoke_hub_rbac_setup_reader_clusterrole_name,
+                       '✅ ClusterRole already exists: ' ~ acm_spoke_hub_rbac_setup_reader_clusterrole_name) }}
+
+    - name: "[HUB RBAC] | R.8) Create reader ClusterRoleBinding"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: "{{ acm_spoke_hub_rbac_setup_reader_clusterrole_name }}"
+          subjects:
+            - kind: ServiceAccount
+              name: "{{ acm_spoke_hub_rbac_setup_reader_sa_name }}"
+              namespace: "{{ acm_spoke_hub_rbac_setup_namespace }}"
+          roleRef:
+            kind: ClusterRole
+            name: "{{ acm_spoke_hub_rbac_setup_reader_clusterrole_name }}"
+            apiGroup: rbac.authorization.k8s.io
+      register: __hub_rbac_reader_crb_result
+
+    - name: "[HUB RBAC] | R.8) Reader ClusterRoleBinding status"
+      ansible.builtin.debug:
+        msg: >-
+          {{ (__hub_rbac_reader_crb_result.changed)
+             | ternary('✅ ClusterRoleBinding created: ' ~ acm_spoke_hub_rbac_setup_reader_clusterrole_name,
+                       '✅ ClusterRoleBinding already exists: ' ~ acm_spoke_hub_rbac_setup_reader_clusterrole_name) }}
+
+    - name: "[HUB RBAC] | R.9) Create reader token Secret"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: "{{ acm_spoke_hub_rbac_setup_reader_token_secret_name }}"
+            namespace: "{{ acm_spoke_hub_rbac_setup_namespace }}"
+            annotations:
+              kubernetes.io/service-account.name: "{{ acm_spoke_hub_rbac_setup_reader_sa_name }}"
+          type: kubernetes.io/service-account-token
+      register: __hub_rbac_reader_secret_result
+
+    - name: "[HUB RBAC] | R.9) Reader token Secret status"
+      ansible.builtin.debug:
+        msg: >-
+          {{ (__hub_rbac_reader_secret_result.changed)
+             | ternary('✅ Token Secret created: ' ~ acm_spoke_hub_rbac_setup_reader_token_secret_name,
+                       '✅ Token Secret already exists: ' ~ acm_spoke_hub_rbac_setup_reader_token_secret_name) }}
+
+    # --- Extract tokens ---
+
+    # Wait for the controller to populate the .data.token field in the Secrets.
+    # Secrets of type service-account-token may take a few seconds to be
+    # populated after creation.
+    - name: "[HUB RBAC] | R.10) Wait for provisioner token to be populated"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Secret
+        name: "{{ acm_spoke_hub_rbac_setup_provisioner_token_secret_name }}"
+        namespace: "{{ acm_spoke_hub_rbac_setup_namespace }}"
+      register: __hub_rbac_provisioner_secret_data
+      until: >-
+        __hub_rbac_provisioner_secret_data.resources | length > 0 and
+        __hub_rbac_provisioner_secret_data.resources[0].data.token is defined
+      retries: 6  # 6 x 5 seconds = 30 seconds
+      delay: 5  # seconds
+      no_log: "{{ acm_spoke_hub_rbac_setup_no_log }}"
+
+    - name: "[HUB RBAC] | R.10) Extract provisioner token"
+      ansible.builtin.set_fact:
+        __hub_rbac_provisioner_token: >-
+          {{ __hub_rbac_provisioner_secret_data.resources[0].data.token | b64decode }}
+      no_log: "{{ acm_spoke_hub_rbac_setup_no_log }}"
+
+    - name: "[HUB RBAC] | R.11) Wait for reader token to be populated"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Secret
+        name: "{{ acm_spoke_hub_rbac_setup_reader_token_secret_name }}"
+        namespace: "{{ acm_spoke_hub_rbac_setup_namespace }}"
+      register: __hub_rbac_reader_secret_data
+      until: >-
+        __hub_rbac_reader_secret_data.resources | length > 0 and
+        __hub_rbac_reader_secret_data.resources[0].data.token is defined
+      retries: 6  # 6 x 5 seconds = 30 seconds
+      delay: 5  # seconds
+      no_log: "{{ acm_spoke_hub_rbac_setup_no_log }}"
+
+    - name: "[HUB RBAC] | R.11) Extract reader token"
+      ansible.builtin.set_fact:
+        __hub_rbac_reader_token: >-
+          {{ __hub_rbac_reader_secret_data.resources[0].data.token | b64decode }}
+      no_log: "{{ acm_spoke_hub_rbac_setup_no_log }}"
+
+    # --- Discovery: list available ManagedClusters ---
+
+    # Leverage the authenticated context (cluster-admin) to discover
+    # which ManagedClusters are imported into the Hub. local-cluster is
+    # excluded because it is the Hub itself.
+    - name: "[HUB RBAC] | R.12) Discover Hub ManagedClusters"
+      kubernetes.core.k8s_info:
+        api_version: cluster.open-cluster-management.io/v1
+        kind: ManagedCluster
+      register: __hub_rbac_discovered_mc
+
+    - name: "[HUB RBAC] | R.12) Build list of available clusters"
+      ansible.builtin.set_fact:
+        __hub_rbac_discovered_clusters: >-
+          {{ __hub_rbac_discovered_mc.resources
+             | map(attribute='metadata.name')
+             | reject('equalto', 'local-cluster')
+             | sort | list }}
+
+    - name: "[HUB RBAC] | R.12) Discovered ManagedClusters"
+      ansible.builtin.debug:
+        msg:
+          - "🔎 ManagedClusters discovered: {{ __hub_rbac_discovered_clusters | length }}"
+          - "   {{ __hub_rbac_discovered_clusters | join(', ') }}"
+
+    # --- Summary ---
+
+    - name: "[HUB RBAC] | Provisioning complete"
+      ansible.builtin.debug:
+        msg: "{{ lookup('ansible.builtin.template', 'reports/hub_rbac_summary.j2').split('\n') }}"
+
+    # Register the tokens and discovered clusters as output facts.
+    # Downstream playbooks use these facts without having to re-read Secrets
+    # or re-list ManagedClusters.
+    - name: "[HUB RBAC] | Register output facts"
+      ansible.builtin.set_fact:
+        acm_spoke_hub_rbac_setup_provisioner_token: "{{ __hub_rbac_provisioner_token }}"
+        acm_spoke_hub_rbac_setup_reader_token: "{{ __hub_rbac_reader_token }}"
+        acm_spoke_hub_rbac_setup_discovered_clusters: "{{ __hub_rbac_discovered_clusters }}"
+      no_log: "{{ acm_spoke_hub_rbac_setup_no_log }}"
+
+  rescue:
+    - name: "[RESCUE] | Hub RBAC provisioning failed"
+      ansible.builtin.fail:
+        msg: >-
+          ❌ FAILED! => Could not provision SAs and RBAC on the ACM Hub.
+          Check: (1) The provided token has cluster-admin permission on the Hub.
+          (2) RHACM is installed and the namespace
+          '{{ acm_spoke_hub_rbac_setup_namespace }}' exists.
+          (3) Connectivity to {{ acm_spoke_hub_rbac_setup_hub_url }}.
+          Details: {{ ansible_failed_result.msg | default('No details available') }}
+...

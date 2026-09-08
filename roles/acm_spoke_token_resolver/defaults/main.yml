@@ -1,0 +1,77 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# =============================================================================
+# acm_spoke_token_resolver - default variables
+# =============================================================================
+#
+# Resolves a temporary bearer token for any spoke/managed cluster registered
+# on an RHACM Hub, using the ManagedServiceAccount (MSA) API.
+# Works with any Kubernetes distribution: OpenShift, AKS, EKS, GKE,
+# IKS, ROSA, ARO or vanilla K8s, as long as the cluster is imported as a
+# ManagedCluster on the Hub with the klusterlet running.
+#
+# Instead of maintaining a static credential per cluster, the automation
+# authenticates once against the ACM Hub and the role returns a
+# spoke_token + spoke_api_url pair that any downstream automation can consume.
+#
+# Output facts (set by the role):
+#   acm_spoke_token_resolver_spoke_token          - bearer token for the spoke
+#   acm_spoke_token_resolver_spoke_api_url        - spoke API URL
+#   acm_spoke_token_resolver_spoke_validate_certs - resolved TLS setting (bool)
+# =============================================================================
+
+# --- ACM Hub connection ---
+
+# ACM Hub API URL (e.g., https://api.hub.example.com:6443).
+# In AAP, inject via a custom credential type. Never hardcode tokens
+# or URLs in Job Template variables.
+acm_spoke_token_resolver_hub_url: ""
+
+# Bearer token for Hub authentication. Token from a ServiceAccount on
+# the Hub with read-only RBAC. The SA only needs get/list on 5 resource
+# types (ManagedCluster, ManagedClusterAddOn, ManagedServiceAccount,
+# Secret, ManifestWork).
+acm_spoke_token_resolver_hub_token: ""
+
+# Validate TLS certificates when connecting to the Hub API.
+acm_spoke_token_resolver_validate_certs: true
+
+# Validate TLS certificates when connecting to the spoke API (Stage 04).
+# "auto" (default): auto-detects from the ManagedCluster CR 'vendor' label.
+# OpenShift (ARO, ROSA, OCP) = true; others (AKS, EKS, GKE, IKS,
+# vanilla K8s) = false. Non-OpenShift platforms use internal CAs that
+# are not in the EE trust store.
+# Accepts manual override with true or false for specific cases.
+acm_spoke_token_resolver_spoke_validate_certs: "auto"
+
+# --- Target spoke cluster ---
+
+# ManagedCluster name on the Hub (OpenShift, AKS, EKS, GKE, IKS, etc.).
+# Corresponds to the Hub namespace where the MSA Secret and ManifestWork reside.
+acm_spoke_token_resolver_target_cluster: ""
+
+# --- ManagedServiceAccount configuration ---
+
+# ManagedServiceAccount CR name on the Hub. All spokes use the same
+# MSA name. The namespace (target_cluster) is what differentiates them.
+# Change only if your organization uses a different naming convention.
+acm_spoke_token_resolver_msa_name: "acm-spoke-automation"
+
+# ManifestWork CR name that deploys RBAC (ClusterRoleBinding) on the spoke.
+# The preflight check validates that this ManifestWork exists and has
+# Applied status before attempting to use the token.
+acm_spoke_token_resolver_manifestwork_name: "acm-spoke-automation-rbac"
+
+# --- Logging and masking ---
+
+# Masks sensitive data (tokens, secrets) in AAP job output.
+# Default: true. Use false ONLY for Hub login troubleshooting.
+acm_spoke_token_resolver_no_log: "{{ var_no_log | default(true) | bool }}"
+
+# Character used in visual separator blocks in log output.
+acm_spoke_token_resolver_separator_char: "="
+
+# Padding added to separator blocks for readability.
+acm_spoke_token_resolver_default_message_padding: 4
+...

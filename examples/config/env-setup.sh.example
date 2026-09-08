@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# =============================================================================
+# ENVIRONMENT VARIABLE CONFIGURATION - ACM Spoke Token Resolver
+# =============================================================================
+# Copy this file to '.local/env-setup.sh' and fill in your credentials.
+# Then source it before running any playbook:
+#   source .local/env-setup.sh
+#
+# The .local/ directory is gitignored, so credentials placed there will
+# never reach the repository.
+#
+# IMPORTANT: NEVER COMMIT the real 'env-setup.sh' with credentials!
+# =============================================================================
+
+# --- Hub connection (shared by both roles) -----------------------------------
+
+# ACM Hub API URL (e.g., https://api.hub.example.com:6443)
+export ACM_HUB_URL=""
+
+# Hub ServiceAccount bearer token for the RESOLVER role (read-only).
+# SA: acm-spoke-reader (get/list on ManagedCluster, MSA, Secret, MW, Addon).
+export ACM_HUB_TOKEN_READONLY=""
+
+# Hub ServiceAccount bearer token for the SETUP role (write).
+# SA: acm-spoke-provisioner (create/update on MSA, ManifestWork, Addon).
+export ACM_HUB_TOKEN_ADMIN=""
+
+# Validate TLS certificates when connecting to the Hub API.
+# Set to "false" only for lab environments with self-signed certificates.
+export ACM_VALIDATE_SSL="true"
+
+# =============================================================================
+# VALIDATION - checks that required variables are non-empty after export
+# =============================================================================
+_env_errors=0
+
+_check_vars=(ACM_HUB_URL)
+
+# Portable indirect expansion: eval works in both bash and zsh
+for _var in "${_check_vars[@]}"; do
+    eval "_val=\"\${${_var}}\""
+    if [ -z "${_val}" ]; then
+        echo -e "\033[0;31m❌ MISSING: ${_var} is not set or empty.\033[0m"
+        _env_errors=$((_env_errors + 1))
+    fi
+done
+
+# At least one token must be set
+eval "_ro=\"\${ACM_HUB_TOKEN_READONLY}\""
+eval "_adm=\"\${ACM_HUB_TOKEN_ADMIN}\""
+if [ -z "${_ro}" ] && [ -z "${_adm}" ]; then
+    echo -e "\033[0;31m❌ MISSING: At least one of ACM_HUB_TOKEN_READONLY or ACM_HUB_TOKEN_ADMIN must be set.\033[0m"
+    _env_errors=$((_env_errors + 1))
+fi
+
+if [ "$_env_errors" -gt 0 ]; then
+    echo -e "\n\033[1;33m⚠️  ${_env_errors} variable(s) missing. Some playbooks may fail.\033[0m"
+else
+    echo -e "\033[0;32m✅ Hub URL: ${ACM_HUB_URL}\033[0m"
+    [ -n "${_ro}" ]  && echo -e "\033[0;32m✅ Read-only token set (resolver)\033[0m"
+    [ -n "${_adm}" ] && echo -e "\033[0;32m✅ Admin token set (setup)\033[0m"
+fi
+
+unset _env_errors _var _val _check_vars _ro _adm

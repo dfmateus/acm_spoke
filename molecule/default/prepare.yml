@@ -1,0 +1,22 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# molecule/default/prepare.yml
+# Installs collection dependencies required by the roles under test.
+# The kubernetes.core collection is needed because the roles import
+# modules from it (kubernetes.core.k8s, kubernetes.core.k8s_info).
+
+- name: "Prepare - install collection dependencies"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: "Install collection dependencies from requirements.yml"
+      ansible.builtin.command:
+        cmd: >-
+          ansible-galaxy collection install
+          -r {{ playbook_dir }}/../../collections/requirements.yml
+          --force
+      changed_when: true
+...

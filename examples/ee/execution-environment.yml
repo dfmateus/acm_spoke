@@ -1,0 +1,64 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# execution-environment.yml
+# =============================================================================
+# Execution Environment definition for acm_spoke_token_resolver / acm_spoke_token_setup
+#
+# Build command (run from the repository root):
+#
+#   1. Build the collection tarball:
+#      ansible-galaxy collection build . --output-path . --force
+#
+#   2. Build the EE:
+#      ansible-builder build \
+#        -t acm-spoke-token-resolver-ee:1.0.0 \
+#        -f examples/ee/execution-environment.yml \
+#        --context .local/tmp/ee-build
+#
+# The --context path is relative to the repository root. ansible-builder copies
+# build assets into that directory; delete it after a successful build:
+#   rm -rf .local/tmp/ee-build
+#
+# This EE packages everything needed to run the roles on AAP or locally
+# via ansible-navigator: Ansible collections, Python libraries, and the
+# oc CLI binary.
+# =============================================================================
+
+version: 3
+
+options:
+  # ee-minimal-rhel9 ships microdnf, not dnf. Without this override the bindep
+  # assemble script fails with "/usr/bin/dnf: No such file or directory".
+  package_manager_path: /usr/bin/microdnf
+
+images:
+  base_image:
+    # ee-minimal-rhel9 ships ansible-core + ansible-runner; no extra collections or CLIs.
+    name: "registry.redhat.io/ansible-automation-platform/ee-minimal-rhel9:2.17"
+
+dependencies:
+  # Ansible collections — kubernetes.core provides k8s and k8s_info modules.
+  galaxy: ../../collections/requirements.yml  # relative to this file (examples/ee/)
+  python:
+    - kubernetes>=28.1.0   # Python client for kubernetes.core modules
+    - PyYAML>=6.0          # YAML parsing (ansible-core dep, pinned for consistency)
+    - jsonpatch>=1.33      # JSON Patch support for k8s_json_patch module
+
+# The collection tarball is built with:
+#   ansible-galaxy collection build . --output-path . --force
+# and must exist at the project root before running ansible-builder.
+additional_build_files:
+  - src: ../../dfmateus-acm_spoke-1.0.0.tar.gz
+    dest: collections
+
+additional_build_steps:
+  append_final:
+    # Install the dfmateus.acm_spoke collection itself so FQCN role references work.
+    - COPY _build/collections/dfmateus-acm_spoke-1.0.0.tar.gz /tmp/dfmateus-acm_spoke-1.0.0.tar.gz
+    - RUN ansible-galaxy collection install /tmp/dfmateus-acm_spoke-1.0.0.tar.gz -p /usr/share/ansible/collections && rm /tmp/dfmateus-acm_spoke-1.0.0.tar.gz
+    # openshift-clients (oc/kubectl): binary from the Red Hat mirror.
+    # Required for oc login / oc whoami in the hub login tasks.
+    # Pinned to stable-4.17 (update to match target OCP version).
+    - RUN curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-4.17/openshift-client-linux.tar.gz | tar xz -C /usr/local/bin oc kubectl && chmod +x /usr/local/bin/oc /usr/local/bin/kubectl
+...

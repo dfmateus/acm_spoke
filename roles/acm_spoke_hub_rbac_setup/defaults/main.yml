@@ -1,0 +1,78 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# =============================================================================
+# acm_spoke_hub_rbac_setup - default variables
+# =============================================================================
+#
+# Provisions the ServiceAccounts and RBAC on the ACM Hub required by the
+# acm_spoke_token_setup (write) and acm_spoke_token_resolver (read-only)
+# roles. Creates two SAs with least-privilege permissions:
+#
+#   acm-spoke-provisioner  — write: creates MSA, ManifestWork, enables addon
+#   acm-spoke-reader       — read-only: reads MSA Secret, validates preflight
+#
+# Prerequisite: the token provided in acm_spoke_hub_rbac_setup_hub_token
+# MUST belong to a user or SA with the cluster-admin role on the Hub. This
+# role runs once per Hub to create the credential infrastructure.
+#
+# After execution, the tokens for both SAs are displayed in the final banner.
+# Use those tokens in hub_vars_admin.yml and hub_vars_readonly.yml.
+# =============================================================================
+
+# --- ACM Hub connection ---
+
+# API URL of the ACM Hub (e.g., https://api.hub.example.com:6443).
+acm_spoke_hub_rbac_setup_hub_url: ""
+
+# Bearer token for a user with cluster-admin on the Hub.
+# Can be kubeadmin, an existing SA with cluster-admin, or any identity
+# with permission to create SA, ClusterRole and ClusterRoleBinding.
+acm_spoke_hub_rbac_setup_hub_token: ""
+
+# Validate TLS certificates when connecting to the Hub API.
+acm_spoke_hub_rbac_setup_validate_certs: true
+
+# --- Namespace ---
+
+# Namespace where the SAs will be created. Must be the primary ACM Hub
+# namespace where the MCE/ACM CRDs are installed.
+acm_spoke_hub_rbac_setup_namespace: "open-cluster-management"
+
+# --- ServiceAccount: Provisioner (write) ---
+
+# Name of the write SA used by the acm_spoke_token_setup role.
+acm_spoke_hub_rbac_setup_provisioner_sa_name: "acm-spoke-provisioner"
+
+# Name of the write ClusterRole.
+acm_spoke_hub_rbac_setup_provisioner_clusterrole_name: "acm-spoke-provisioner"
+
+# Name of the long-lived token Secret for the provisioner.
+acm_spoke_hub_rbac_setup_provisioner_token_secret_name: "acm-spoke-provisioner-token"
+
+# --- ServiceAccount: Reader (read-only) ---
+
+# Name of the read-only SA used by the acm_spoke_token_resolver role.
+acm_spoke_hub_rbac_setup_reader_sa_name: "acm-spoke-reader"
+
+# Name of the read-only ClusterRole.
+acm_spoke_hub_rbac_setup_reader_clusterrole_name: "acm-spoke-reader"
+
+# Name of the long-lived token Secret for the reader.
+acm_spoke_hub_rbac_setup_reader_token_secret_name: "acm-spoke-reader-token"
+
+# Name of the MSA Secret the reader will have permission to read.
+# Must match acm_spoke_token_resolver_msa_name / acm_spoke_token_setup_msa_name.
+acm_spoke_hub_rbac_setup_msa_secret_name: "acm-spoke-automation"
+
+# --- Logging and masking ---
+
+# Masks sensitive data (tokens) in job output.
+acm_spoke_hub_rbac_setup_no_log: "{{ var_no_log | default(true) | bool }}"
+
+# Character used in visual separator blocks in the output log.
+acm_spoke_hub_rbac_setup_separator_char: "="
+
+# Padding added to separator blocks for readability.
+acm_spoke_hub_rbac_setup_default_message_padding: 4
+...

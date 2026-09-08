@@ -1,0 +1,50 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Job Template: ACM Spoke Bootstrap
+#
+# End-to-end setup: creates Hub SAs and RBAC, auto-discovers all
+# ManagedClusters, provisions MSA and ManifestWork on each spoke,
+# and validates access. Idempotent: re-running detects new spokes
+# and provisions only the missing ones.
+#
+# Import via infra.controller_configuration.job_templates role.
+# Variable name for CaC: controller_templates
+
+controller_templates:
+  - name: "JT - ACM Spoke - <ENV> - Bootstrap Hub + Spoke"
+    description: >-
+      Full bootstrap of the ACM spoke credential infrastructure. Creates
+      Hub ServiceAccounts and RBAC, auto-discovers all ManagedClusters,
+      provisions MSA and ManifestWork on each spoke, and validates access.
+      Idempotent: re-running against an already-provisioned fleet changes
+      nothing except the oc login token refresh. Use the optional survey
+      field target_clusters to limit the scope to specific spokes.
+    organization: "<ORGANIZATION>"
+    project: "ACM Spoke Collection (main)"
+    playbook: "playbooks/bootstrap_hub_spoke.yml"
+    inventory: "ACM Spoke - <ENV>"
+    execution_environment: "EE - ACM Spoke 1.0.0"
+    credentials:
+      - "ACM Spoke - Hub Admin (<ENV>)"  # Credential Type: ACM Spoke Bootstrap - Hub
+    verbosity: 1
+    extra_vars:
+      var_no_log: true
+    survey_enabled: true
+    survey_spec:
+      name: "Bootstrap Survey"
+      description: "Optional filter for target spoke clusters"
+      spec:
+        - question_name: "Target Clusters (Optional)"
+          question_description: >-
+            JSON list of ManagedCluster names to bootstrap. If left empty,
+            the playbook auto-discovers and processes all ManagedClusters
+            on the Hub (excluding local-cluster). Use exact names from
+            oc get managedclusters on the Hub. Format:
+            ["spoke-aro-01", "spoke-aks-01"]. A single cluster can also
+            be entered as ["spoke-aro-01"].
+          variable: target_clusters
+          type: textarea
+          required: false
+          default: ""
+...

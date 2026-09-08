@@ -1,0 +1,61 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# STAGE 04: Validates the resolved token by testing connectivity to the spoke.
+# Makes a lightweight GET /apis call to the spoke API using the resolved bearer
+# token. If it returns HTTP 200, the token is valid and the spoke is reachable
+# from the execution environment.
+- name: "[STAGE 04 - Validation] | Starting validation"
+  ansible.builtin.debug:
+    msg: "{{ lookup('ansible.builtin.template', 'reports/stage_banner.j2').split('\n') }}"
+  vars:
+    acm_spoke_token_resolver_banner_title: "🧪 STAGE 04 - Validation"
+    acm_spoke_token_resolver_banner_lines:
+      - "Validating MSA access to spoke '{{ acm_spoke_token_resolver_target_cluster }}'"
+
+- name: "[STAGE 04 - Validation] | 04.1) Assert resolved facts are set"
+  ansible.builtin.assert:
+    that:
+      - acm_spoke_token_resolver_spoke_token | default('') | length > 0
+      - acm_spoke_token_resolver_spoke_api_url | default('') | length > 0
+    fail_msg: >-
+      ❌ FAILED! => Spoke access data is empty after MSA resolution.
+      Check the previous step for errors reading the MSA Secret or the ManagedCluster CR.
+    success_msg: >-
+      ✅ OK! => Spoke access data is set.
+      API URL: {{ acm_spoke_token_resolver_spoke_api_url }}
+
+- name: "[STAGE 04 - Validation] | 04.2) Test spoke connectivity using resolved token"
+  ansible.builtin.uri:
+    url: "{{ acm_spoke_token_resolver_spoke_api_url }}/apis"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ acm_spoke_token_resolver_spoke_token }}"
+    validate_certs: "{{ __acm_spoke_tls_resolved }}"
+    status_code: [200]
+    timeout: 30  # seconds
+  register: __acm_spoke_test_result
+  failed_when: false
+  no_log: "{{ acm_spoke_token_resolver_no_log }}"
+
+- name: "[STAGE 04 - Validation] | 04.2) Assert spoke is reachable"
+  ansible.builtin.assert:
+    that:
+      - __acm_spoke_test_result.status == 200
+    fail_msg: >-
+      ❌ FAILED! => Could not reach spoke cluster
+      '{{ acm_spoke_token_resolver_target_cluster }}'
+      at {{ acm_spoke_token_resolver_spoke_api_url }}.
+      HTTP status: {{ __acm_spoke_test_result.status | default('N/A') }}.
+      Possible causes: (1) MSA token expired and the klusterlet has not renewed it yet.
+      (2) Network path blocked: verify the execution environment can reach the spoke
+      API (port varies by platform: 6443 for OpenShift, 443 for AKS/EKS/GKE).
+      (3) RBAC not applied: check the ManifestWork status.
+    success_msg: >-
+      ✅ OK! => Spoke cluster '{{ acm_spoke_token_resolver_target_cluster }}'
+      reachable at {{ acm_spoke_token_resolver_spoke_api_url }}. MSA token is valid.
+
+- name: "[STAGE 04 - Validation] | 04.3) Resolution summary"
+  ansible.builtin.debug:
+    msg: "{{ lookup('ansible.builtin.template', 'reports/resolver_summary.j2').split('\n') }}"
+...

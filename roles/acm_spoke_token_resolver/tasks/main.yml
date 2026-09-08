@@ -1,0 +1,34 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Entry point: resolves a temporary spoke token from the ACM Hub via
+# ManagedServiceAccount. All steps run inside block/rescue so that any
+# failure produces a single, actionable error message.
+#
+# Output facts:
+#   acm_spoke_token_resolver_spoke_token          - bearer token for the spoke
+#   acm_spoke_token_resolver_spoke_api_url        - spoke API URL
+#   acm_spoke_token_resolver_spoke_validate_certs - resolved TLS setting (bool) for use with kubernetes.core
+- name: "[RESOLVER] | Resolve MSA token from the ACM Hub"
+  block:
+    - name: "[STAGE 01 - Hub Login] | Authenticate to the ACM Hub"
+      ansible.builtin.include_tasks: 1-hub_login.yml
+
+    - name: "[STAGE 02 - Preflight] | Validate prerequisites"
+      ansible.builtin.include_tasks: 2-preflight.yml
+
+    - name: "[STAGE 03 - Read MSA] | Read MSA Secret from the Hub"
+      ansible.builtin.include_tasks: 3-read_msa_secret.yml
+
+    - name: "[STAGE 04 - Validation] | Validate resolved token"
+      ansible.builtin.include_tasks: 4-validate.yml
+
+  rescue:
+    - name: "[RESCUE] | MSA token resolution failed"
+      ansible.builtin.fail:
+        msg: >-
+          ❌ FAILED! => Could not resolve the MSA token for cluster
+          '{{ acm_spoke_token_resolver_target_cluster }}'.
+          Check Hub connectivity, MSA addon status, and Secret existence.
+          Details: {{ ansible_failed_result.msg | default('No details available') }}
+...

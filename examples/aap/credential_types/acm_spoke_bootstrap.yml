@@ -1,0 +1,53 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Credential Type: ACM Spoke Bootstrap - Hub
+#
+# Used by the Bootstrap JT. Injects a cluster-admin token so the bootstrap
+# playbook can create SAs, RBAC, MSA CRs, and ManifestWorks on the Hub.
+#
+# Import via infra.controller_configuration or create manually in AAP UI
+# under Administration > Credential Types.
+#
+# Related SA manifest: examples/rbac/ (cluster-admin or kubeadmin token)
+# Related JT: examples/aap/job_templates/bootstrap.yml
+
+controller_credential_types:
+  - name: "ACM Spoke Bootstrap - Hub"
+    description: >-
+      Injects Hub connection variables for the bootstrap playbook
+      (bootstrap_hub_spoke.yml). Requires cluster-admin on the Hub to create
+      ServiceAccounts, RBAC, MSA CRs, and ManifestWorks end-to-end. Use only
+      for initial setup and re-runs to onboard new clusters.
+    kind: cloud
+    inputs:
+      fields:
+        - id: hub_url
+          type: string
+          label: "ACM Hub API URL (Required)"
+          help_text: >-
+            Full URL of the ACM Hub API endpoint
+            (e.g., https://api.hub.example.com:6443).
+        - id: hub_token
+          type: string
+          label: "Hub Bearer Token (Required)"
+          secret: true
+          help_text: >-
+            Token with cluster-admin on the Hub. Creates SAs, RBAC, MSA CRs,
+            and ManifestWorks. Required for initial bootstrap and re-runs to
+            onboard new clusters.
+        - id: validate_certs
+          type: boolean
+          label: "Validate Hub TLS Certificate (Optional)"
+          help_text: >-
+            Verify the Hub API server TLS certificate chain. Uncheck only
+            in lab environments with self-signed certificates.
+      required:
+        - hub_url
+        - hub_token
+    injectors:
+      extra_vars:
+        acm_spoke_hub_rbac_setup_hub_url: "{{ hub_url }}"
+        acm_spoke_hub_rbac_setup_hub_token: "{{ hub_token }}"
+        acm_spoke_hub_rbac_setup_validate_certs: "{{ validate_certs | default(true) }}"
+...

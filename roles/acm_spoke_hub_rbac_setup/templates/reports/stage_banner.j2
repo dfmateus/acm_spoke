@@ -1,0 +1,10 @@
+{# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com> #}
+{# SPDX-License-Identifier: GPL-3.0-or-later #}
+{% set _banner_all_lines = [acm_spoke_hub_rbac_setup_banner_title] + (acm_spoke_hub_rbac_setup_banner_lines | default([])) %}
+{% set _banner_max_len = _banner_all_lines | map('length') | max %}
+{% set _banner_sep = (acm_spoke_hub_rbac_setup_banner_sep_char | default(acm_spoke_hub_rbac_setup_separator_char) | default('=')) * (_banner_max_len + 2) %}
+{{ _banner_sep }}
+{% for _banner_line in _banner_all_lines %}
+ {{ _banner_line }}
+{% endfor %}
+{{ _banner_sep }}

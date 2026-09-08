@@ -1,0 +1,57 @@
+---
+# Copyright (C) 2025-2026 Diego Felipe Mateus <dfmateus@hotmail.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Credential Type: ACM Spoke Resolver - Hub
+#
+# Used by the Resolver JT for daily operations. Injects the acm-spoke-reader
+# token, which has read-only access to 5 resource types on the Hub and zero
+# permissions on any spoke.
+#
+# Import via infra.controller_configuration or create manually in AAP UI
+# under Administration > Credential Types.
+#
+# Related SA manifest: examples/rbac/acm-spoke-reader-rbac.yaml
+# Related JT: examples/aap/job_templates/resolver.yml
+
+controller_credential_types:
+  - name: "ACM Spoke Resolver - Hub"
+    description: >-
+      Injects Hub connection variables for the resolver playbook
+      (resolve_spoke_access.yml). Uses the acm-spoke-reader ServiceAccount
+      with read-only access on the Hub. This is the credential type for daily
+      operations. The SA can read MSA Secrets but cannot create, modify, or
+      delete anything on the Hub or the spokes.
+    kind: cloud
+    inputs:
+      fields:
+        - id: hub_url
+          type: string
+          label: "ACM Hub API URL (Required)"
+          help_text: >-
+            Full URL of the ACM Hub API endpoint
+            (e.g., https://api.hub.example.com:6443).
+        - id: hub_token
+          type: string
+          label: "Hub Bearer Token (Required)"
+          secret: true
+          help_text: >-
+            Long-lived token of the acm-spoke-reader ServiceAccount. Read-only
+            access, no cluster-admin on the Hub. See
+            examples/rbac/acm-spoke-reader-rbac.yaml for the SA manifest and
+            setup-guide.md section 1.2 for token generation.
+        - id: validate_certs
+          type: boolean
+          label: "Validate Hub TLS Certificate (Optional)"
+          help_text: >-
+            Verify the Hub API server TLS certificate chain. Uncheck only
+            in lab environments with self-signed certificates. ARO and
+            ROSA use publicly-trusted certificates.
+      required:
+        - hub_url
+        - hub_token
+    injectors:
+      extra_vars:
+        acm_spoke_token_resolver_hub_url: "{{ hub_url }}"
+        acm_spoke_token_resolver_hub_token: "{{ hub_token }}"
+        acm_spoke_token_resolver_validate_certs: "{{ validate_certs | default(true) }}"
+...
