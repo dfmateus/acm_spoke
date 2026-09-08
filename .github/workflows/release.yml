@@ -1,0 +1,61 @@
+---
+# Release pipeline for dfmateus.acm_spoke collection.
+# Triggers on version tags (v*). Builds the collection tarball,
+# publishes to Ansible Galaxy, and creates a GitHub Release.
+#
+# Requires repository secret: GALAXY_API_TOKEN
+# Generate at: https://galaxy.ansible.com/me/preferences
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    name: Publish to Galaxy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ansible-core
+        run: pip install "ansible-core>=2.18"
+
+      - name: Extract version from tag
+        id: version
+        run: echo "tag=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate galaxy.yml version matches tag
+        run: |
+          GALAXY_VERSION=$(grep '^version:' galaxy.yml | awk '{print $2}')
+          TAG_VERSION="${{ steps.version.outputs.tag }}"
+          if [ "$GALAXY_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::galaxy.yml version ($GALAXY_VERSION) does not match tag (v$TAG_VERSION)"
+            exit 1
+          fi
+
+      - name: Build collection
+        run: ansible-galaxy collection build --output-path dist/
+
+      - name: Publish to Ansible Galaxy
+        run: >-
+          ansible-galaxy collection publish
+          dist/dfmateus-acm_spoke-${{ steps.version.outputs.tag }}.tar.gz
+          --server https://galaxy.ansible.com/
+          --token "${{ secrets.GALAXY_API_TOKEN }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/dfmateus-acm_spoke-${{ steps.version.outputs.tag }}.tar.gz
+          generate_release_notes: true
