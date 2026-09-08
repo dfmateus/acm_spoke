@@ -5,6 +5,23 @@ All notable changes to this collection will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this collection adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-09-08
+
+### Fixed
+
+- README Quick Start code blocks rendering as inline text on Ansible Galaxy.
+  Galaxy's Markdown renderer does not support fenced code blocks indented
+  inside numbered lists.
+
+### Added
+
+- GitHub Actions CI workflow: yamllint, ansible-lint, ansible-test sanity
+  (ansible-core 2.18 + 2.19), and playbook syntax-check on every PR.
+- GitHub Actions release workflow: tag-triggered build, Galaxy publish, and
+  GitHub Release creation.
+- Branch protection ruleset on main: PR required, CI status checks required,
+  force push and branch deletion blocked.
+
 ## [1.0.0] - 2026-09-03
 
 ### Added

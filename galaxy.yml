@@ -3,7 +3,7 @@
 # https://docs.ansible.com/ansible/latest/dev_guide/collections_galaxy_meta.html
 namespace: dfmateus
 name: acm_spoke
-version: 1.0.0
+version: 1.0.1
 description: >-
   Spoke cluster access automation for Red Hat Advanced Cluster Management (RHACM 2.10+).
   Resolves temporary ManagedServiceAccount (MSA) tokens from the ACM Hub and provisions
